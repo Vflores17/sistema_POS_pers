@@ -1,0 +1,37 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: pos-backend
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/pos_db}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:1234}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+    show-sql: false
+
+  jackson:
+    time-zone: UTC
+    serialization:
+      write-dates-as-timestamps: false
+
+logging:
+  level:
+    org.springframework.security: INFO
+    org.hibernate.SQL: INFO
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:change-me-before-prod-change-me-before-prod}
+    access-token-expiration-seconds: ${JWT_ACCESS_EXP_SECONDS:900}
+    refresh-token-expiration-seconds: ${JWT_REFRESH_EXP_SECONDS:604800}
