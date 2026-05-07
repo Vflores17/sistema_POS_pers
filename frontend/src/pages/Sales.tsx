@@ -1,0 +1,1403 @@
+import type { ChangeEvent, ReactElement } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { listClients, type Client } from "../api/clients";
+import {
+  changeSaleStatus,
+  createSale,
+  deleteSale,
+  getNextInvoiceNumber,
+  getSaleById,
+  listSales,
+  updateSale,
+  type PaymentMethod,
+  type Sale,
+  type SaleStatus,
+} from "../api/sales";
+import styles from "./Sales.module.css";
+import Modal from "../components/Modal";
+import { listProducts, createProduct, createProductPrice, getProductPrices, type Product } from "../api/products";
+
+type SortBy = "invoiceNumber" | "createdAt" | "client" | "total";
+type StatusFilter = "ALL" | SaleStatus;
+
+interface LineDraft {
+  id: string;
+  productId: string;
+  quantity: number;
+  unitPrice: string;
+}
+
+// Estado del modal
+interface ModalState {
+  show: boolean;
+  type: "success" | "error" | "confirm" | "warning";
+  title: string;
+  message: string;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  danger?: boolean;
+}
+
+interface SaleFormDraft {
+  clientId: string;
+  paymentMethod: PaymentMethod;
+  lines: LineDraft[];
+  comments: string;
+  status?: SaleStatus; // 👈
+}
+
+const EMPTY_FORM: SaleFormDraft = {
+  clientId: "",
+  paymentMethod: "CASH",
+  lines: [{ id: crypto.randomUUID(), productId: "", quantity: 1, unitPrice: "" }],
+  comments: "",
+};
+
+
+
+export default function Sales(): ReactElement {
+  const [modal, setModal] = useState<ModalState>({ show: false, type: "success", title: "", message: "" });
+
+  const [productModalIndex, setProductModalIndex] = useState<number>(-1);
+  const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const isNewScreen = window.location.pathname === "/sales/new";
+  const isEditScreen = window.location.pathname.endsWith("/edit");
+  const isFormScreen = isNewScreen || isEditScreen;
+
+  const selectedRowRef = useRef<HTMLTableRowElement | null>(null);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
+  const [saleDraft, setSaleDraft] = useState<SaleFormDraft>(EMPTY_FORM);
+  const [invoiceNumber, setInvoiceNumber] = useState<number>(0);
+  const [selectedRowId, setSelectedRowId] = useState<string>("");
+  const [showProductModal, setShowProductModal] = useState<boolean>(false);
+  const [clientSearch, setClientSearch] = useState<string>("");
+  const [sortBy, setSortBy] = useState<SortBy>("createdAt");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [showClientDropdown, setShowClientDropdown] = useState<boolean>(false);
+  const [showCreateProductModal, setShowCreateProductModal] = useState<boolean>(false);
+  const [productModalSearch, setProductModalSearch] = useState<string>("");
+
+  const [productDraft, setProductDraft] = useState<ProductDraft>({
+    name: "", description: "", stock: "0",
+    priceDetail: "0",
+    priceWholesale: "0",
+  });
+  const [lineSearch, setLineSearch] = useState<Record<string, string>>({});
+  const [activeLineId, setActiveLineId] = useState<string>("");
+
+  const productsById = useMemo(() => {
+    return new Map(products.map((product) => [product.id, product]));
+  }, [products]);
+
+  const [clientDropdownIndex, setClientDropdownIndex] = useState<number>(-1);
+
+  const [viewProduct, setViewProduct] = useState<Product | null>(null);
+
+  const [viewProductPrices, setViewProductPrices] = useState<{ type: string; price: number }[]>([]);
+
+  useEffect(() => {
+    if (!isFormScreen) return;
+
+    function handleKeyDown(e: KeyboardEvent): void {
+
+      if (showCreateProductModal || showProductModal || modal.show) return;
+      // F2 → Crear producto
+      if (e.key === "F2") {
+        e.preventDefault();
+        setProductDraft({ name: "", description: "", stock: "0", priceDetail: "0", priceWholesale: "0" }); // 👈
+        setShowCreateProductModal(true);
+      }
+      // F3 → Listar productos
+      if (e.key === "F3") {
+        e.preventDefault();
+        setShowProductModal(true);
+      }
+      // F4 → Ver producto
+      // F4 → Ver producto
+      if (e.key === "F4") {
+        e.preventDefault();
+        const line = saleDraft.lines.find((item) => item.id === selectedRowId);
+        const product = line ? productsById.get(line.productId) : undefined;
+        if (product) {
+          setViewProduct(product);
+          // 👈 cargar precios
+          getProductPrices(product.id).then(setViewProductPrices).catch(() => setViewProductPrices([]));
+        } else {
+          setError("Selecciona una fila con producto.");
+        }
+      }
+      // F5 → Agregar fila
+      if (e.key === "F5") {
+        e.preventDefault();
+        addEmptyRow();
+      }
+      // F6 → Eliminar fila
+      if (e.key === "F6") {
+        e.preventDefault();
+        removeSelectedRow();
+      }
+      // Alt + A → Guardar
+      if (e.altKey && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        void onSave(false);
+      }
+      // Alt + M → Guardar e Imprimir
+      if (e.altKey && e.key.toLowerCase() === "m") {
+        e.preventDefault();
+        void onSave(true);
+      }
+      // Alt + S → Salir
+      if (e.altKey && e.code === "KeyS") {
+        e.preventDefault();
+        if (hasUnsavedChanges()) {
+          setModal({
+            show: true,
+            type: "warning",
+            danger: true,
+            title: "¿Salir sin guardar?",
+            message: "La factura tiene cambios que no se han guardado. ¿Estás seguro que deseas salir?",
+            confirmLabel: "Salir",
+            cancelLabel: "Cancelar",
+            onConfirm: () => {
+              closeModal();
+              navigate("/sales");
+            },
+            onCancel: closeModal,
+          });
+        } else {
+          navigate("/sales");
+        }
+      }
+      // Alt + P → Método de pago
+      if (e.altKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        const select = document.querySelector<HTMLSelectElement>("select[value]");
+        select?.focus();
+      }
+      // Alt + B → Buscar cliente
+      if (e.altKey && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        const input = document.querySelector<HTMLInputElement>("input[placeholder='Buscar cliente...']");
+        input?.focus();
+      }
+      if (!isInputFocused) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          const lines = saleDraft.lines;
+          const currentIndex = lines.findIndex((line) => line.id === selectedRowId);
+          const nextIndex = Math.min(currentIndex + 1, lines.length - 1);
+          setSelectedRowId(lines[nextIndex]?.id ?? "");
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          const lines = saleDraft.lines;
+          const currentIndex = lines.findIndex((line) => line.id === selectedRowId);
+          const prevIndex = Math.max(currentIndex - 1, 0);
+          setSelectedRowId(lines[prevIndex]?.id ?? "");
+        }
+
+        if (e.key === "Escape" && viewProduct) {
+          e.preventDefault();
+          setViewProduct(null);
+          setViewProductPrices([]); // 👈
+        }
+      }
+    }
+
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFormScreen, saleDraft, selectedRowId, productsById, addEmptyRow, removeSelectedRow, onSave, navigate]);
+
+  useEffect(() => {
+    if (!showProductModal) return;
+
+    function handleKeyDown(e: KeyboardEvent): void {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setShowProductModal(false);
+        setProductModalSearch("");
+      }
+
+      if (e.key === "Enter") {  // 👈
+        e.preventDefault();
+        document.querySelector<HTMLButtonElement>("#saveProductBtn")?.click();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showProductModal]);
+
+  useEffect(() => {
+    if (!showCreateProductModal) return;
+
+    function handleKeyDown(e: KeyboardEvent): void {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowCreateProductModal(false);
+      }
+      if (e.altKey && e.code === "KeyG") {
+        e.preventDefault();
+        e.stopPropagation();
+        document.querySelector<HTMLButtonElement>("#saveProductBtn")?.click();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown, true); // 👈 true
+    return () => window.removeEventListener("keydown", handleKeyDown, true); // 👈 true
+  }, [showCreateProductModal]);
+
+  useEffect(() => {
+    void bootstrap();
+  }, [isFormScreen, isEditScreen, id]);
+
+  useEffect(() => {
+    if (!selectedRowRef.current) return;
+
+    const container = document.querySelector(`.${styles.gridScrollArea}`) as HTMLElement;
+    if (!container) return;
+
+    const lines = saleDraft.lines;
+    const index = lines.findIndex((line) => line.id === selectedRowId);
+
+    if (index === 0) {
+      container.scrollTop = 0;
+      return;
+    }
+
+    const row = selectedRowRef.current;
+    const thead = container.querySelector("thead") as HTMLElement;
+    const theadHeight = thead ? thead.offsetHeight : 0;
+    const rowTop = row.offsetTop - theadHeight;
+    const rowBottom = row.offsetTop + row.offsetHeight;
+    const containerTop = container.scrollTop;
+    const containerBottom = container.scrollTop + container.offsetHeight;
+
+    if (rowTop < containerTop) {
+      container.scrollTop = rowTop;
+    } else if (rowBottom > containerBottom) {
+      container.scrollTop = rowBottom - container.offsetHeight;
+    }
+  }, [selectedRowId, saleDraft.lines]);
+
+  const sessionUserLabel = useMemo(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return "Usuario de sesión";
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      return payload.sub ?? "Usuario de sesión";
+    } catch {
+      return "Usuario de sesión";
+    }
+  }, []);
+
+  const [lineDropdownIndex, setLineDropdownIndex] = useState<Record<string, number>>({});
+
+  const activeElement = document.activeElement?.tagName.toLowerCase();
+  const isInputFocused = activeElement === "input" || activeElement === "select" || activeElement === "textarea";
+
+
+  const clientsById = useMemo(() => {
+    return new Map(clients.map((client) => [client.id, client]));
+  }, [clients]);
+
+  const filteredClientOptions = useMemo(() => {
+    const term = clientSearch.trim().toLowerCase();
+    if (!term) {
+      return clients;
+    }
+    return clients.filter((client) => client.name.toLowerCase().includes(term));
+  }, [clients, clientSearch]);
+
+  const calculatedTotal = useMemo(() => {
+    return saleDraft.lines.reduce((sum, line) => {
+      const product = productsById.get(line.productId);
+      const price = line.unitPrice !== ""
+        ? Number(line.unitPrice)
+        : product ? Number(product.price) : 0;
+      return sum + price * line.quantity;
+    }, 0);
+  }, [saleDraft.lines, productsById]);
+
+  const sortedAndFilteredSales = useMemo(() => {
+    let result = sales;
+    if (statusFilter !== "ALL") {
+      result = result.filter((sale) => sale.status === statusFilter);
+    }
+    return [...result].sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === "invoiceNumber") {
+        comparison = a.invoiceNumber - b.invoiceNumber;
+      } else if (sortBy === "createdAt") {
+        comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      } else if (sortBy === "total") {
+        comparison = Number(a.total) - Number(b.total);
+      } else {
+        const aClient = clientsById.get(a.clientId)?.name ?? "";
+        const bClient = clientsById.get(b.clientId)?.name ?? "";
+        comparison = aClient.localeCompare(bClient);
+      }
+      return sortDir === "asc" ? comparison : -comparison;
+    });
+  }, [sales, sortBy, sortDir, statusFilter, clientsById]);
+
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+
+  function closeModal(): void {
+    setModal((prev) => ({ ...prev, show: false }));
+  }
+
+
+  interface ProductDraft {
+    name: string;
+    description: string;
+    stock: string;
+    priceDetail: string;
+    priceWholesale: string;
+  }
+
+  function hasUnsavedChanges(): boolean {
+    console.log("clientId:", saleDraft.clientId);
+    console.log("lines:", saleDraft.lines);
+    const hasClient = saleDraft.clientId !== "";
+    const hasProducts = saleDraft.lines.some((line) => line.productId !== "");
+    console.log("hasClient:", hasClient, "hasProducts:", hasProducts);
+    return hasClient || hasProducts;
+  }
+
+  async function bootstrap(): Promise<void> {
+    setLoading(true);
+    setError("");
+    try {
+      const baseData = await Promise.all([listClients(), listProducts()]);
+      setClients(baseData[0]);
+      setProducts(baseData[1]);
+      if (isFormScreen) {
+        if (isEditScreen && id) {
+          const sale = await getSaleById(id);
+          setInvoiceNumber(sale.invoiceNumber);
+          setSaleDraft({
+            clientId: sale.clientId,
+            paymentMethod: sale.paymentMethod,
+            status: sale.status, // 👈
+            lines: sale.details.map((detail) => ({
+              id: detail.id ?? crypto.randomUUID(),
+              productId: detail.productId,
+              quantity: detail.quantity,
+              unitPrice: "",
+            })),
+            comments: "",
+          });
+        } else {
+          const next = await getNextInvoiceNumber();
+          setInvoiceNumber(next);
+          setSaleDraft(EMPTY_FORM);
+          setClientSearch("");
+          setSelectedRowId("");
+          setLineSearch({});
+          setActiveLineId("");
+          setClientDropdownIndex(-1);
+        }
+      } else {
+        const salesData = await listSales();
+        setSales(salesData);
+      }
+    } catch (err) {
+      setError(readError(err, "No se pudo cargar la información de ventas."));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function onPaymentMethodChange(event: ChangeEvent<HTMLSelectElement>): void {
+    const paymentMethod = event.target.value as PaymentMethod;
+    setSaleDraft((prev) => ({ ...prev, paymentMethod }));
+  }
+
+  function onCommentChange(event: ChangeEvent<HTMLTextAreaElement>): void {
+    setSaleDraft((prev) => ({ ...prev, comments: event.target.value }));
+  }
+
+  function onLineProductChange(lineId: string, productId: string): void {
+    setSaleDraft((prev) => ({
+      ...prev,
+      lines: prev.lines.map((line) =>
+        line.id === lineId ? { ...line, productId } : line
+      ),
+    }));
+  }
+
+  function onLineQuantityChange(lineId: string, quantity: string): void {
+    const parsed = Number(quantity);
+    setSaleDraft((prev) => ({
+      ...prev,
+      lines: prev.lines.map((line) =>
+        line.id === lineId
+          ? { ...line, quantity: Number.isNaN(parsed) ? 0 : Math.max(0, parsed) }
+          : line
+      ),
+    }));
+  }
+
+  function addEmptyRow(): void {
+    const newLine = { id: crypto.randomUUID(), productId: "", quantity: 1, unitPrice: "" };
+
+    if (!selectedRowId) {
+      // Si no hay fila seleccionada, agrega al final
+      setSaleDraft((prev) => ({
+        ...prev,
+        lines: [...prev.lines, newLine]
+      }));
+      return;
+    }
+
+    // Inserta después de la fila seleccionada
+    setSaleDraft((prev) => {
+      const index = prev.lines.findIndex((line) => line.id === selectedRowId);
+      const updated = [...prev.lines];
+      updated.splice(index + 1, 0, newLine);
+      return { ...prev, lines: updated };
+    });
+  }
+
+  function removeSelectedRow(): void {
+    if (!selectedRowId) {
+      setError("Selecciona una fila para eliminar.");
+      return;
+    }
+    setSaleDraft((prev) => {
+      const remaining = prev.lines.filter((line) => line.id !== selectedRowId);
+      return {
+        ...prev,
+        lines: remaining.length > 0 ? remaining : [{ id: crypto.randomUUID(), productId: "", quantity: 1, unitPrice: "" }],
+      };
+    });
+    setSelectedRowId("");
+  }
+
+  function onLinePriceChange(lineId: string, price: string): void {
+    setSaleDraft((prev) => ({
+      ...prev,
+      lines: prev.lines.map((line) =>
+        line.id === lineId ? { ...line, unitPrice: price } : line
+      ),
+    }));
+  }
+
+  function addProductFromModal(productId: string): void {
+    setSaleDraft((prev) => {
+      const lines = prev.lines;
+      // Si hay una sola fila y está vacía, reemplázala
+      if (lines.length === 1 && lines[0].productId === "") {
+        return {
+          ...prev,
+          lines: [{ id: lines[0].id, productId, quantity: 1, unitPrice: "" }]
+        };
+      }
+      // Si no, agrega al final
+      return {
+        ...prev,
+        lines: [...lines, { id: crypto.randomUUID(), productId, quantity: 1, unitPrice: "" }],
+      };
+    });
+    setShowProductModal(false);
+    setProductModalIndex(-1);
+  }
+
+  async function onSave(printAfterSave: boolean): Promise<void> {
+    setError("");
+    if (!saleDraft.clientId) {
+      setError("Selecciona un cliente.");
+      return;
+    }
+
+    const cleanedLines = saleDraft.lines
+      .filter((line) => line.productId.trim().length > 0)
+      .map((line) => ({ productId: line.productId, quantity: line.quantity }));
+
+    if (cleanedLines.length === 0) {
+      setError("Debes agregar al menos un producto.");
+      return;
+    }
+
+    if (cleanedLines.some((line) => line.quantity <= 0)) {
+      setError("Todas las cantidades deben ser mayores a 0.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = {
+        clientId: saleDraft.clientId,
+        paymentMethod: saleDraft.paymentMethod,
+        items: cleanedLines,
+      };
+      const saved = isEditScreen && id
+        ? await updateSale(id, payload)
+        : await createSale(payload);
+      if (!isEditScreen && saleDraft.status && saleDraft.status !== "PENDING") {
+        await changeSaleStatus(saved.id, saleDraft.status);
+      }
+
+      if (printAfterSave) {
+        window.print();
+      }
+      // Resetear formulario para nueva factura
+      const next = await getNextInvoiceNumber();
+      setInvoiceNumber(next);
+      setSaleDraft(EMPTY_FORM);
+      setClientSearch("");
+      setSelectedRowId("");
+      setLineSearch({});
+
+      setModal({
+        show: true,
+        type: "success",
+        title: isEditScreen ? "Factura modificada" : "Factura creada",
+        message: isEditScreen
+          ? "La factura fue modificada correctamente."
+          : "La factura fue creada correctamente.",
+        onConfirm: () => {
+          closeModal();
+          if (isEditScreen) navigate("/sales"); // 👈
+        },
+        confirmLabel: "Aceptar",
+      });
+
+    } catch (err) {
+      setError(readError(err, "No se pudo guardar la venta."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onDeleteSale(saleId: string): Promise<void> {
+    setModal({
+      show: true,
+      type: "confirm",
+      title: "Eliminar factura",
+      message: "¿Estás seguro que deseas eliminar esta factura? Esta acción no se puede deshacer.",
+      confirmLabel: "Eliminar",
+      cancelLabel: "Cancelar",
+      onConfirm: async () => {
+        closeModal();
+        try {
+          await deleteSale(saleId);
+          setSales((prev) => prev.filter((sale) => sale.id !== saleId));
+        } catch (err) {
+          setError(readError(err, "No se pudo eliminar la venta."));
+        }
+      },
+      onCancel: closeModal,
+    });
+  }
+
+  async function onMarkAsPaid(saleId: string): Promise<void> {
+    try {
+      const updated = await changeSaleStatus(saleId, "PAID");
+      setSales((prev) => prev.map((sale) => (sale.id === saleId ? updated : sale)));
+    } catch (err) {
+      setError(readError(err, "No se pudo marcar la venta como pagada."));
+    }
+  }
+
+  function closeRegister(): void {
+    const today = new Date().toISOString().slice(0, 10);
+    const todaySales = sales.filter(
+      (sale) => sale.createdAt.slice(0, 10) === today && sale.status !== "CANCELLED"
+    );
+    const total = todaySales.reduce((sum, sale) => sum + Number(sale.total), 0);
+    window.alert(`Cierre del día\nVentas: ${todaySales.length}\nTotal: ${total.toFixed(2)}`);
+    window.print();
+  }
+
+  if (loading) {
+    return <section className={styles.page}>Cargando ventas...</section>;
+  }
+
+  if (isFormScreen) {
+    return (
+      <div style={{
+        background: "#f0f4f0",
+        minHeight: "90vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "flex-start",
+        padding: "1rem"
+      }}>        <section className={styles.container}>
+          <header className={styles.header}>
+            <h2 className={styles.title}>{isEditScreen ? "Modificar Venta" : "Nueva Venta"}</h2>
+          </header>
+
+          {error ? <p className={styles.error}>{error}</p> : null}
+
+          <div className={styles.card}>          <div className={styles.topGrid}>
+            <div className={styles.field}>
+              <label>Número de factura</label>
+              <div className={styles.invoiceNumber}>{invoiceNumber || "—"}</div>
+            </div>
+            <div className={styles.field}>
+              <label><u>B</u>uscar cliente</label>              <div style={{ position: "relative", zIndex: 50 }}>
+                <input
+                  value={clientSearch}
+                  onChange={(e) => {
+                    setClientSearch(e.target.value);
+                    setSaleDraft((prev) => ({ ...prev, clientId: "" }));
+                    setShowClientDropdown(true);
+                    setClientDropdownIndex(-1);
+                  }}
+                  onFocus={() => setShowClientDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
+                  onKeyDown={(e) => {
+                    if (!showClientDropdown) return;
+                    const options = filteredClientOptions.slice(0, 4);
+                    if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      setClientDropdownIndex((prev) => Math.min(prev + 1, options.length - 1));
+                    }
+                    if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      setClientDropdownIndex((prev) => Math.max(prev - 1, 0));
+                    }
+                    if (e.key === "Enter" && clientDropdownIndex >= 0) {
+                      e.preventDefault();
+                      const selected = options[clientDropdownIndex];
+                      setSaleDraft((prev) => ({ ...prev, clientId: selected.id }));
+                      setClientSearch(selected.name);
+                      setShowClientDropdown(false);
+                      setClientDropdownIndex(-1);
+                    }
+                    if (e.key === "Escape") {
+                      setShowClientDropdown(false);
+                      setClientDropdownIndex(-1);
+                    }
+                  }}
+                  placeholder="Buscar cliente..."
+                  autoComplete="off"
+                />
+                {showClientDropdown && (
+                  <div className={styles.clientDropdown}>
+                    {filteredClientOptions.slice(0, 4).map((client, index) => (
+                      <div
+                        key={client.id}
+                        className={styles.clientOption}
+                        style={index === clientDropdownIndex ? { background: "#d1fae5", color: "#16a34a" } : {}}
+                        onMouseDown={() => {
+                          setSaleDraft((prev) => ({ ...prev, clientId: client.id }));
+                          setClientSearch(client.name);
+                          setShowClientDropdown(false);
+                          setClientDropdownIndex(-1);
+                        }}
+                        onMouseEnter={() => setClientDropdownIndex(index)}
+                      >
+                        {client.name}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className={styles.field}>
+              <label>Método de <u>p</u>ago</label>              <select value={saleDraft.paymentMethod} onChange={onPaymentMethodChange}>
+                <option value="CASH">Efectivo</option>
+                <option value="SINPE">SINPE</option>
+                <option value="TRANSFER">Transferencia</option>
+              </select>
+            </div>
+            <div className={styles.field}>
+              <label>Vendedor</label>
+              <input value={sessionUserLabel} readOnly />
+            </div>
+            <div className={styles.field}>
+              <label>Estado</label>
+              <select
+                value={saleDraft.status ?? "PENDING"}
+                onChange={async (e) => {
+                  const newStatus = e.target.value as SaleStatus;
+                  if (isEditScreen && id) {
+                    // En edición → llama al backend de inmediato
+                    try {
+                      await changeSaleStatus(id, newStatus);
+                    } catch {
+                      setError("No se pudo cambiar el estado.");
+                      return;
+                    }
+                  }
+                  // En ambos casos actualiza el estado local
+                  setSaleDraft((prev) => ({ ...prev, status: newStatus }));
+                }}
+              >
+                <option value="PENDING">Pendiente</option>
+                <option value="PAID">Pagada</option>
+                <option value="CANCELLED">Cancelada</option>
+              </select>
+            </div>
+          </div>
+
+            <div className={styles.menuBar}>
+              <button className={styles.primaryButton} type="button"
+                onClick={() => setShowCreateProductModal(true)}>
+                Crear producto <kbd>F2</kbd>
+              </button>
+              <button className={styles.button} type="button" onClick={() => setShowProductModal(true)}>
+                Listar productos <kbd>F3</kbd>
+              </button>
+              <button
+                className={styles.button}
+                type="button"
+                onClick={() => {
+                  const line = saleDraft.lines.find((item) => item.id === selectedRowId);
+                  const product = line ? productsById.get(line.productId) : undefined;
+                  if (product) {
+                    setViewProduct(product);
+                  } else {
+                    setError("Selecciona una fila con producto.");
+                  }
+                }}
+              >
+                Ver producto <kbd>F4</kbd>
+              </button>
+              <button className={styles.button} type="button" onClick={addEmptyRow}>
+                Agregar fila <kbd>F5</kbd>
+              </button>
+              <button className={styles.dangerButton} type="button" onClick={removeSelectedRow}>
+                Eliminar fila <kbd>F6</kbd>
+              </button>
+            </div>
+
+            <div className={styles.gridScrollArea}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Cantidad</th>
+                    <th>Precio unitario</th>
+                    <th>Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {saleDraft.lines.map((line) => {
+                    const product = productsById.get(line.productId);
+                    const unitPrice = line.unitPrice !== ""
+                      ? Number(line.unitPrice)
+                      : product ? Number(product.price) : 0;
+                    return (
+                      <tr
+                        key={line.id}
+                        ref={selectedRowId === line.id ? selectedRowRef : null}
+                        onClick={() => setSelectedRowId(line.id)}
+                        className={selectedRowId === line.id ? styles.selected : ""}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <td>
+                          <input
+                            type="text"
+                            placeholder="Buscar producto..."
+                            value={
+                              line.productId
+                                ? (productsById.get(line.productId)?.name ?? "")
+                                : (lineSearch[line.id] ?? "")
+                            }
+                            onChange={(e) => {
+                              setLineSearch((prev) => ({ ...prev, [line.id]: e.target.value }));
+                              onLineProductChange(line.id, "");
+                              setLineDropdownIndex((prev) => ({ ...prev, [line.id]: -1 }));
+                            }}
+                            onFocus={(e) => {
+                              setActiveLineId(line.id);
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setDropdownPosition({ top: rect.bottom, left: rect.left });
+                            }}
+                            onBlur={() => setTimeout(() => setActiveLineId(""), 200)}
+                            onKeyDown={(e) => {
+                              if (activeLineId !== line.id) return;
+                              const options = products
+                                .filter((p) =>
+                                  p.name.toLowerCase().includes((lineSearch[line.id] ?? "").toLowerCase())
+                                )
+                                .slice(0, 5);
+                              if (e.key === "ArrowDown") {
+                                e.preventDefault();
+                                setLineDropdownIndex((prev) => ({
+                                  ...prev,
+                                  [line.id]: Math.min((prev[line.id] ?? -1) + 1, options.length - 1)
+                                }));
+                              }
+                              if (e.key === "ArrowUp") {
+                                e.preventDefault();
+                                setLineDropdownIndex((prev) => ({
+                                  ...prev,
+                                  [line.id]: Math.max((prev[line.id] ?? 0) - 1, 0)
+                                }));
+                              }
+                              if (e.key === "Enter" && (lineDropdownIndex[line.id] ?? -1) >= 0) {
+                                e.preventDefault();
+                                const selected = options[lineDropdownIndex[line.id]];
+                                onLineProductChange(line.id, selected.id);
+                                setLineSearch((prev) => ({ ...prev, [line.id]: "" }));
+                                setActiveLineId("");
+                                setLineDropdownIndex((prev) => ({ ...prev, [line.id]: -1 }));
+                              }
+                              if (e.key === "Escape") {
+                                setActiveLineId("");
+                                setLineDropdownIndex((prev) => ({ ...prev, [line.id]: -1 }));
+                              }
+                            }}
+                            style={{ width: "180px" }}
+                          />
+                          {activeLineId === line.id && (
+                            <div
+                              className={styles.clientDropdown}
+                              style={{
+                                position: "fixed",
+                                top: dropdownPosition?.top ?? 0,
+                                left: dropdownPosition?.left ?? 0,
+                                zIndex: 9999,
+                                width: "200px"
+                              }}
+                            >
+                              {products
+                                .filter((p) =>
+                                  p.name.toLowerCase().includes((lineSearch[line.id] ?? "").toLowerCase())
+                                )
+                                .slice(0, 5)
+                                .map((p, index) => (
+                                  <div
+                                    key={p.id}
+                                    className={styles.clientOption}
+                                    style={index === (lineDropdownIndex[line.id] ?? -1)
+                                      ? { background: "#d1fae5", color: "#16a34a" }
+                                      : {}}
+                                    onMouseEnter={() => setLineDropdownIndex((prev) => ({ ...prev, [line.id]: index }))}
+                                    onMouseDown={() => {
+                                      onLineProductChange(line.id, p.id);
+                                      setLineSearch((prev) => ({ ...prev, [line.id]: "" }));
+                                      setActiveLineId("");
+                                      setLineDropdownIndex((prev) => ({ ...prev, [line.id]: -1 }));
+                                    }}
+                                  >
+                                    {p.name}
+                                  </div>
+                                ))}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={line.quantity}
+                            onChange={(event) => onLineQuantityChange(line.id, event.target.value)}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={line.unitPrice !== "" ? line.unitPrice : unitPrice}
+                            onChange={(e) => onLinePriceChange(line.id, e.target.value)}
+                            style={{ width: "90px" }}
+                          />
+                        </td>
+                        <td>{(unitPrice * line.quantity).toLocaleString('es-CR')}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className={styles.commentsWrap}>
+              <label>Comentarios (solo impresión)</label>
+              <textarea value={saleDraft.comments} onChange={onCommentChange} rows={3} />
+            </div>
+
+          </div>
+
+          <div className={styles.formBottomBar}>
+            <p className={styles.totalBar}>Total: ₡{calculatedTotal.toLocaleString('es-CR')}</p>
+            <div className={styles.bottomActions}>
+              <button className={styles.primaryButton} type="button" disabled={saving} onClick={() => void onSave(false)}>
+                Guard<u>a</u>r
+              </button>
+              <button className={styles.button} type="button" disabled={saving} onClick={() => void onSave(true)}>
+                Guardar e I<u>m</u>primir
+              </button>
+              <button className={styles.button} type="button" onClick={() => navigate("/sales")}>
+                <u>S</u>alir
+              </button>
+            </div>
+          </div>
+
+          {showCreateProductModal && (
+            <div className={styles.modalBackdrop}>
+              <div className={styles.modal}>
+                <header className={styles.modalHeader}>
+                  <h3>Crear Producto</h3>
+                  <button className={styles.button} type="button"
+                    onClick={() => setShowCreateProductModal(false)}>
+                    Cerrar <kbd>Esc</kbd>
+                  </button>
+                </header>
+
+                <div className={styles.topGrid} style={{ gridTemplateColumns: "1fr 1fr" }}>
+                  <div className={styles.field}>
+                    <label>Nombre</label>
+                    <input
+                      value={productDraft.name}
+                      onChange={(e) => setProductDraft(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="Nombre del producto"
+
+                    />
+                  </div>
+                  <div className={styles.field}>
+                    <label>Descripción</label>
+                    <input
+                      value={productDraft.description}
+                      onChange={(e) => setProductDraft(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Opcional"
+                    />
+                  </div>
+                  <div className={styles.field}>
+                    <label>Stock</label>
+                    <input
+                      type="number" min="0"
+                      value={productDraft.stock}
+                      onChange={(e) => setProductDraft(prev => ({ ...prev, stock: e.target.value }))}
+                    />
+                  </div>
+                  <div className={styles.field}>
+                    <label>Precio Detalle</label>
+                    <input
+                      id="priceDetailInput"
+                      type="number" min="0"
+                      value={productDraft.priceDetail}
+                      onChange={(e) => setProductDraft(prev => ({ ...prev, priceDetail: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          document.querySelector<HTMLInputElement>("#priceDetailInput")?.focus();
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className={styles.field}>
+                    <label>Precio Mayorista</label>
+                    <input
+                      id="priceWholesaleInput"
+                      type="number" min="0"
+                      value={productDraft.priceWholesale}
+                      onChange={(e) => setProductDraft(prev => ({ ...prev, priceWholesale: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          document.querySelector<HTMLButtonElement>("#saveProductBtn")?.click();
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className={styles.formBottomBar} style={{ background: "transparent", padding: 0 }}>
+                  <button
+                    id="saveProductBtn"
+                    className={styles.primaryButton}
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const created = await createProduct({
+                          name: productDraft.name,
+                          description: productDraft.description,
+                          stock: Number(productDraft.stock),
+                          price: Number(productDraft.priceDetail),
+                          status: "ACTIVE"
+                        });
+
+                        // 👈 Crear precios
+                        await createProductPrice(created.id, "DETAIL", Number(productDraft.priceDetail));
+                        await createProductPrice(created.id, "WHOLESALE", Number(productDraft.priceWholesale));
+
+                        const updated = await listProducts();
+                        setProducts(updated);
+                        setSaleDraft((prev) => ({
+                          ...prev,
+                          lines: [
+                            ...prev.lines,
+                            { id: crypto.randomUUID(), productId: created.id, quantity: 1, unitPrice: "" }
+                          ]
+                        }));
+                        setProductDraft({ name: "", description: "", stock: "0", priceDetail: "0", priceWholesale: "0" });
+                        setShowCreateProductModal(false);
+                        setModal({
+                          show: true,
+                          type: "success",
+                          title: "Producto creado",
+                          message: `El producto "${created.name}" fue creado y agregado a la factura.`,
+                          onConfirm: closeModal,
+                          confirmLabel: "Aceptar",
+                        });
+                      } catch {
+                        setError("No se pudo crear el producto.");
+                      }
+                    }}
+                  >
+                    <u>G</u>uardar producto
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showProductModal && (
+            <div className={styles.modalBackdrop}>
+              <div className={styles.modal}>
+                <header className={styles.modalHeader}>
+                  <h3>Productos</h3>
+                  <button className={styles.button} type="button"
+                    onClick={() => { setShowProductModal(false); setProductModalSearch(""); }}>
+                    Cerrar <kbd>Esc</kbd>
+                  </button>
+                </header>
+                <div className={styles.field}>
+                  <input
+                    type="text"
+                    placeholder="Buscar producto..."
+                    value={productModalSearch}
+                    onChange={(e) => {
+                      setProductModalSearch(e.target.value);
+                      setProductModalIndex(-1);
+                    }} autoFocus
+                    onKeyDown={(e) => {
+                      const filtered = products.filter((p) =>
+                        p.name.toLowerCase().includes(productModalSearch.toLowerCase())
+                      );
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setProductModalIndex((prev) => Math.min(prev + 1, filtered.length - 1));
+                      }
+                      if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setProductModalIndex((prev) => Math.max(prev - 1, 0));
+                      }
+                      if (e.key === "Enter" && productModalIndex >= 0) {
+                        e.preventDefault();
+                        const selected = filtered[productModalIndex];
+                        if (selected) {
+                          addProductFromModal(selected.id);
+                          setProductModalIndex(-1);
+                        }
+                      }
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        setShowProductModal(false);
+                        setProductModalSearch("");
+                        setProductModalIndex(-1);
+                      }
+                    }}
+                  />
+                </div>
+                <div className={styles.tableWrap}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        <th>Nombre</th>
+                        <th>Stock</th>
+                        <th>Precio</th>
+                        <th>Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {products
+                        .filter((p) => p.name.toLowerCase().includes(productModalSearch.toLowerCase()))
+                        .map((product, index) => (
+                          <tr
+                            key={product.id}
+                            style={index === productModalIndex ? { background: "#dcfce7", cursor: "pointer" } : { cursor: "pointer" }}
+                            onMouseEnter={() => setProductModalIndex(index)}
+                            onClick={() => {
+                              addProductFromModal(product.id);
+                              setProductModalIndex(-1);
+                            }}
+                          >
+                            <td>{product.name}</td>
+                            <td>{product.stock}</td>
+                            <td>₡{Number(product.price).toLocaleString('es-CR')}</td>
+                            <td>
+                              <button className={styles.button} type="button">
+                                Agregar
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )
+          }
+
+          {viewProduct && (
+            <div className={styles.modalBackdrop}>
+              <div className={styles.modal}>
+                <header className={styles.modalHeader}>
+                  <h3>Detalle del Producto</h3>
+                  <button className={styles.button} type="button"
+                    onClick={() => {
+                      setViewProduct(null);
+                      setViewProductPrices([]); // 👈
+                    }}>
+                    Cerrar <kbd>Esc</kbd>
+                  </button>
+                </header>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", padding: "0.5rem 0" }}>
+                  <div className={styles.field}>
+                    <label>Nombre</label>
+                    <input value={viewProduct.name} readOnly />
+                  </div>
+                  <div className={styles.field}>
+                    <label>Estado</label>
+                    <input value={viewProduct.status === "ACTIVE" ? "Activo" : "Inactivo"} readOnly />
+                  </div>
+                  <div className={styles.field}>
+                    <label>Stock</label>
+                    <input value={viewProduct.stock} readOnly />
+                  </div>
+                  {viewProduct.description && (
+                    <div className={styles.field} style={{ gridColumn: "span 2" }}>
+                      <label>Descripción</label>
+                      <input value={viewProduct.description} readOnly />
+                    </div>
+
+                  )}
+                  <div className={styles.field}>
+                    <label>Precio Detalle</label>
+                    <input
+                      value={
+                        viewProductPrices.find(p => p.type === "DETAIL")
+                          ? `₡${Number(viewProductPrices.find(p => p.type === "DETAIL")?.price).toLocaleString('es-CR')}`
+                          : "No definido"
+                      }
+                      readOnly
+                    />
+                  </div>
+                  <div className={styles.field}>
+                    <label>Precio Mayorista</label>
+                    <input
+                      value={
+                        viewProductPrices.find(p => p.type === "WHOLESALE")
+                          ? `₡${Number(viewProductPrices.find(p => p.type === "WHOLESALE")?.price).toLocaleString('es-CR')}`
+                          : "No definido"
+                      }
+                      readOnly
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          {modal.show && (
+            <Modal
+              type={modal.type}
+              title={modal.title}
+              message={modal.message}
+              onConfirm={modal.onConfirm}
+              onCancel={modal.onCancel}
+              confirmLabel={modal.confirmLabel}
+              cancelLabel={modal.cancelLabel}
+              danger={modal.danger}
+            />
+          )}
+        </section>
+      </div>
+    );
+  }
+
+  const selectedSale = sortedAndFilteredSales.find(s => s.id === selectedRowId);
+
+  return (
+
+    <div style={{
+      background: "#f0f4f0",
+      minHeight: "90vh",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "flex-start",
+      padding: "1rem"
+    }}>      <section className={styles.container}>
+        <header className={styles.header}>
+          <h2 className={styles.title}>FACTURACIÓN</h2>
+          <div className={styles.headerActions}>
+            <span style={{ color: '#9ca3af', fontSize: '0.9rem' }}>
+              {new Date().toLocaleDateString('es-CR')}
+            </span>
+          </div>
+        </header>
+
+        {error ? <p className={styles.error}>{error}</p> : null}
+
+        <div className={styles.filters}>
+          <div className={styles.field}>
+            <label>Ordenar por</label>
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortBy)}>
+              <option value="invoiceNumber">Número</option>
+              <option value="createdAt">Fecha</option>
+              <option value="client">Cliente</option>
+              <option value="total">Monto</option>
+            </select>
+          </div>
+          <div className={styles.field}>
+            <label>Dirección</label>
+            <select value={sortDir} onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}>
+              <option value="desc">Descendente</option>
+              <option value="asc">Ascendente</option>
+            </select>
+          </div>
+          <div className={styles.field}>
+            <label>Estado</label>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}>
+              <option value="ALL">Todas</option>
+              <option value="PENDING">Pendientes</option>
+              <option value="PAID">Pagadas</option>
+              <option value="CANCELLED">Canceladas</option>
+            </select>
+          </div>
+        </div>
+
+        <div className={styles.tableContainer}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>Nro. Factura</th>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th>Método de pago</th>
+                <th>Total</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedAndFilteredSales.length === 0 ? (
+                <tr><td colSpan={6} className={styles.empty}>No hay ventas registradas.</td></tr>
+              ) : (
+                sortedAndFilteredSales.map((sale) => (
+                  <tr
+                    key={sale.id}
+                    className={selectedRowId === sale.id ? styles.selected : ""}
+                    onClick={() => setSelectedRowId(sale.id)}
+                  >
+                    <td>{sale.invoiceNumber}</td>
+                    <td>{new Date(sale.createdAt).toLocaleDateString('es-CR')}</td>
+                    <td>{clientsById.get(sale.clientId)?.name ?? sale.clientId}</td>
+                    <td>{mapPaymentMethod(sale.paymentMethod)}</td>
+                    <td>₡{Number(sale.total).toLocaleString('es-CR')}</td>                  <td>
+                      <span className={`${styles.status} ${styles[sale.status.toLowerCase()]}`}>
+                        {mapStatus(sale.status)}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className={styles.bottomBar}>
+          <div className={styles.bottomActions}>
+            <button className={styles.primaryButton} type="button"
+              onClick={() => navigate("/sales/new")}>
+              Crear
+            </button>
+            <button className={styles.button} type="button"
+              disabled={!selectedRowId}
+              onClick={() => selectedRowId && navigate(`/sales/${selectedRowId}/edit`)}>
+              Modificar
+            </button>
+            <button className={styles.button} type="button"
+              disabled={!selectedRowId}
+              onClick={() => selectedRowId && navigate(`/sales/${selectedRowId}/edit`)}>
+              Ver Factura
+            </button>
+            <button className={styles.button} type="button"
+              disabled={!selectedRowId}
+              onClick={() => { if (selectedRowId) window.print(); }}>
+              Imprimir
+            </button>
+            <button className={styles.dangerButton} type="button"
+              disabled={!selectedRowId}
+              onClick={() => selectedRowId && void onDeleteSale(selectedRowId)}>
+              Eliminar
+            </button>
+            <button className={styles.primaryButton} type="button"
+              disabled={!selectedRowId || selectedSale?.status !== "PENDING"}
+              onClick={() => selectedRowId && void onMarkAsPaid(selectedRowId)}>
+              Pagar
+            </button>
+          </div>
+          <div className={styles.bottomGlobal}>
+            <button className={styles.button} type="button" onClick={closeRegister}>
+              Cierre de caja
+            </button>
+            <button className={styles.button} type="button" onClick={() => navigate("/dashboard")}>
+              Salir
+            </button>
+          </div>
+        </div>
+        {modal.show && (
+          <Modal
+            type={modal.type}
+            title={modal.title}
+            message={modal.message}
+            onConfirm={modal.onConfirm}
+            onCancel={modal.onCancel}
+            confirmLabel={modal.confirmLabel}
+            cancelLabel={modal.cancelLabel}
+            danger={modal.danger}
+          />
+        )}
+      </section>
+    </div>
+  );
+}
+
+function mapPaymentMethod(paymentMethod: PaymentMethod): string {
+  if (paymentMethod === "SINPE") {
+    return "SINPE";
+  }
+  if (paymentMethod === "TRANSFER") {
+    return "Transferencia";
+  }
+  return "Efectivo";
+}
+
+function mapStatus(status: SaleStatus): string {
+  if (status === "PAID") {
+    return "Pagada";
+  }
+  if (status === "CANCELLED") {
+    return "Cancelada";
+  }
+  return "Pendiente";
+}
+
+function readError(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  return fallback;
+}

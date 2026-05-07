@@ -56,6 +56,24 @@ public class Sale {
     @Column(nullable = false)
     @Builder.Default    
     private SaleStatus status = SaleStatus.PENDING;
+    
+    @Column(name = "invoice_number", nullable = false, unique = true)
+    private Long invoiceNumber;
+
+    @Column(name = "client_id", nullable = false)
+    private UUID clientId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_method", nullable = false)
+    @Builder.Default
+    private PaymentMethod paymentMethod = PaymentMethod.CASH;
+
+    public enum PaymentMethod {
+        CASH,
+        SINPE,
+        TRANSFER
+    }
+    
     public enum SaleStatus {
         PENDING,
         PAID,

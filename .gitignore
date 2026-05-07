@@ -1,0 +1,3 @@
+target/
+backend/target/
+frontend/public/favicon.svg

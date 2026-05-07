@@ -71,4 +71,9 @@ public class SaleController {
             saleService.updateStatus(id, request.status())
         );
     }
+
+    @GetMapping("/next-invoice-number")
+    public ResponseEntity<ApiResponse<Long>> getNextInvoiceNumber() {
+        return ResponseEntity.ok(ApiResponse.ok(saleService.getNextInvoiceNumber()));
+    }
 }

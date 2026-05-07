@@ -33,5 +33,5 @@ logging:
 app:
   jwt:
     secret: ${JWT_SECRET:change-me-before-prod-change-me-before-prod}
-    access-token-expiration-seconds: ${JWT_ACCESS_EXP_SECONDS:900}
+    access-token-expiration-seconds: ${JWT_ACCESS_EXP_SECONDS:3600}
     refresh-token-expiration-seconds: ${JWT_REFRESH_EXP_SECONDS:604800}

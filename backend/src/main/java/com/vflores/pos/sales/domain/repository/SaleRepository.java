@@ -28,4 +28,7 @@ public interface SaleRepository extends JpaRepository<Sale, UUID> {
             WHERE s.id = :id
             """)
     Optional<Sale> findByIdWithDetails(@Param("id") UUID id);
+
+    @Query("select coalesce(max(s.invoiceNumber), 0) from Sale s")
+    Long findMaxInvoiceNumber();
 }

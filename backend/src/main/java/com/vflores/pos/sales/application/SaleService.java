@@ -58,30 +58,27 @@ public class SaleService {
 
     @Transactional
     public SaleResponse create(CreateSaleRequest request) {
-        System.out.println("REQUEST = " + request + "/n");
-        System.out.println("CLIENT ID = " + request.clientId()+ "/n");
-        System.out.println("ITEMS = " + request.items()+ "/n");
-        System.out.println("ANTES computeSale"+ "/n");
         SaleComputation computation = computeSale(request.clientId(), request.items());
+        Long nextInvoiceNumber = saleRepository.findMaxInvoiceNumber() + 1;
+        Sale.PaymentMethod paymentMethod = request.paymentMethod() == null
+                ? Sale.PaymentMethod.CASH
+                : request.paymentMethod();
 
-        System.out.println("ANTES construir sale"+ "/n");
+        UUID currentUserId = getCurrentUserId();
+        
         Sale sale = Sale.builder()
-        .userId(request.userId())
-        .total(computation.total())
-        .status(Sale.SaleStatus.PENDING) 
-        .details(new ArrayList<>())
-        .build();
+                .invoiceNumber(nextInvoiceNumber)
+                .userId(currentUserId)
+                .clientId(request.clientId())
+                .paymentMethod(paymentMethod)
+                .total(computation.total())
+                .status(Sale.SaleStatus.PENDING)
+                .details(new ArrayList<>())
+                .build();
 
-        System.out.println("ANTES details"+ "/n");
         sale.getDetails().addAll(buildSaleDetails(sale, computation.lines()));
-
-        System.out.println("ANTES stock"+ "/n");
         applyStockDelta(computation.quantityByProduct(), computation.productsById(), -1);
-
-        System.out.println("ANTES save"+ "/n");
         Sale saved = saleRepository.save(sale);
-
-        System.out.println("ANTES response"+ "/n");
         return toResponse(saved);
     }
 
@@ -103,7 +100,9 @@ public class SaleService {
         SaleComputation computation = computeSale(request.clientId(),request.items());
 
         // 4. Actualizar datos de la venta
-        sale.setUserId(request.userId());
+        sale.setUserId(getCurrentUserId());
+        sale.setClientId(request.clientId());
+        sale.setPaymentMethod(request.paymentMethod() == null ? Sale.PaymentMethod.CASH : request.paymentMethod());
         sale.setTotal(computation.total());
 
         // 5. Limpiar y reconstruir detalles
@@ -133,7 +132,7 @@ public class SaleService {
             throw new ConflictException("clientId is required");
         }
         Client client = clientRepository.findById(clientId)
-        .orElseThrow(() -> new ResourceNotFoundException("Client not found"));
+        .orElseThrow(() -> new ResourceNotFoundException("Client not found: " + clientId));
         ClientType clientType = client.getType();
         ProductPriceType priceType;
 
@@ -153,7 +152,7 @@ public class SaleService {
             throw new ResourceNotFoundException("One or more product IDs do not exist");
         }
 
-        validateStockAvailability(requestedQuantities, productsById);
+        //validateStockAvailability(requestedQuantities, productsById);
 
         List<SaleLineData> lines = new ArrayList<>();
         BigDecimal total = BigDecimal.ZERO;
@@ -167,7 +166,7 @@ public class SaleService {
             ProductPrice productPrice = productPriceRepository
                 .findByProductIdAndType(product.getId(), priceType)
                 .orElseThrow(() -> new ConflictException(
-                    "No price defined for productId " + product.getId()
+                    "No price defined for product '" + product.getName() + "' and client type " + priceType
                 ));
 
             BigDecimal price = productPrice.getPrice();
@@ -253,8 +252,12 @@ public class SaleService {
 
         return new SaleResponse(
                 sale.getId(),
+                sale.getInvoiceNumber(),
                 sale.getTotal(),
                 sale.getUserId(),
+                sale.getClientId(),
+                sale.getPaymentMethod(),
+                sale.getStatus(),
                 sale.getCreatedAt(),
                 details
         );
@@ -298,8 +301,12 @@ public class SaleService {
 
         return new SaleResponse(
             saved.getId(),
+            saved.getInvoiceNumber(),
             saved.getTotal(),
             saved.getUserId(),
+            saved.getClientId(),
+            saved.getPaymentMethod(),
+            saved.getStatus(),
             saved.getCreatedAt(),
             mapDetails(saved.getDetails())
         );
@@ -315,5 +322,18 @@ public class SaleService {
                         d.getSubtotal()
                 ))
                 .toList();
+    }
+
+    private UUID getCurrentUserId() {
+        var authentication = org.springframework.security.core.context.SecurityContextHolder
+                .getContext().getAuthentication();
+        var principal = (com.vflores.pos.auth.infrastructure.security.AuthenticatedUser) 
+                authentication.getPrincipal();
+        return principal.getId();
+    }
+
+    @Transactional(readOnly = true)
+    public Long getNextInvoiceNumber() {
+        return saleRepository.findMaxInvoiceNumber() + 1;
     }
 }
