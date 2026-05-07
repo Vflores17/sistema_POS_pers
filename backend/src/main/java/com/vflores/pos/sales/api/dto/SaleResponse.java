@@ -15,6 +15,7 @@ public record SaleResponse(
         Sale.PaymentMethod paymentMethod,
         Sale.SaleStatus status,
         OffsetDateTime createdAt,
-        List<SaleDetailResponse> details
+        List<SaleDetailResponse> details,
+        List<SalePaymentResponse> payments
 ) {
 }

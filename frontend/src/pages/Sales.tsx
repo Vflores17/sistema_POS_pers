@@ -13,6 +13,7 @@ import {
   type PaymentMethod,
   type Sale,
   type SaleStatus,
+  savePayments,
 } from "../api/sales";
 import styles from "./Sales.module.css";
 import Modal from "../components/Modal";
@@ -54,6 +55,20 @@ const EMPTY_FORM: SaleFormDraft = {
   paymentMethod: "CASH",
   lines: [{ id: crypto.randomUUID(), productId: "", quantity: 1, unitPrice: "" }],
   comments: "",
+};
+
+interface PaymentDraft {
+  enabled: boolean;
+  amount: string;
+}
+
+type PaymentDraftState = Record<PaymentMethod, PaymentDraft>;
+
+const EMPTY_PAYMENTS: PaymentDraftState = {
+  CASH: { enabled: false, amount: "" },
+  SINPE: { enabled: false, amount: "" },
+  TRANSFER: { enabled: false, amount: "" },
+  CARD: { enabled: false, amount: "" },
 };
 
 
@@ -263,6 +278,8 @@ export default function Sales(): ReactElement {
     void bootstrap();
   }, [isFormScreen, isEditScreen, id]);
 
+
+
   useEffect(() => {
     if (!selectedRowRef.current) return;
 
@@ -321,6 +338,10 @@ export default function Sales(): ReactElement {
     return clients.filter((client) => client.name.toLowerCase().includes(term));
   }, [clients, clientSearch]);
 
+  const [paymentDraft, setPaymentDraft] = useState<PaymentDraftState>(EMPTY_PAYMENTS);
+
+
+
   const calculatedTotal = useMemo(() => {
     return saleDraft.lines.reduce((sum, line) => {
       const product = productsById.get(line.productId);
@@ -330,6 +351,36 @@ export default function Sales(): ReactElement {
       return sum + price * line.quantity;
     }, 0);
   }, [saleDraft.lines, productsById]);
+
+  function onPaymentToggle(method: PaymentMethod, enabled: boolean): void {
+    setPaymentDraft((prev) => ({
+      ...prev,
+      [method]: { ...prev[method], enabled, amount: enabled ? prev[method].amount : "" },
+    }));
+  }
+
+  function onPaymentAmountChange(method: PaymentMethod, amount: string): void {
+    setPaymentDraft((prev) => ({
+      ...prev,
+      [method]: { ...prev[method], amount },
+    }));
+  }
+
+  async function resolveUnitPrice(productId: string, clientId: string): Promise<string> {
+    const client = clientsById.get(clientId);
+    const priceType = client?.type === "WHOLESALE" ? "WHOLESALE" : "DETAIL";
+    const prices = await getProductPrices(productId);
+    const match = prices.find((p) => p.type === priceType);
+    if (!match) throw new Error("No existe precio para el tipo de cliente.");
+    return String(match.price);
+  }
+  const paymentTotal = useMemo(() => {
+    return (Object.keys(paymentDraft) as PaymentMethod[]).reduce((sum, method) => {
+      if (!paymentDraft[method].enabled) return sum;
+      const amount = Number(paymentDraft[method].amount);
+      return sum + (Number.isNaN(amount) ? 0 : amount);
+    }, 0);
+  }, [paymentDraft]);
 
   const sortedAndFilteredSales = useMemo(() => {
     let result = sales;
@@ -355,9 +406,8 @@ export default function Sales(): ReactElement {
 
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
 
-  function closeModal(): void {
-    setModal((prev) => ({ ...prev, show: false }));
-  }
+
+
 
 
   interface ProductDraft {
@@ -368,12 +418,15 @@ export default function Sales(): ReactElement {
     priceWholesale: string;
   }
 
+
+
+  function closeModal(): void {
+    setModal((prev) => ({ ...prev, show: false }));
+  }
+
   function hasUnsavedChanges(): boolean {
-    console.log("clientId:", saleDraft.clientId);
-    console.log("lines:", saleDraft.lines);
     const hasClient = saleDraft.clientId !== "";
     const hasProducts = saleDraft.lines.some((line) => line.productId !== "");
-    console.log("hasClient:", hasClient, "hasProducts:", hasProducts);
     return hasClient || hasProducts;
   }
 
@@ -409,6 +462,8 @@ export default function Sales(): ReactElement {
           setLineSearch({});
           setActiveLineId("");
           setClientDropdownIndex(-1);
+          setPaymentDraft(EMPTY_PAYMENTS);
+
         }
       } else {
         const salesData = await listSales();
@@ -430,11 +485,30 @@ export default function Sales(): ReactElement {
     setSaleDraft((prev) => ({ ...prev, comments: event.target.value }));
   }
 
-  function onLineProductChange(lineId: string, productId: string): void {
+  async function onLineProductChange(lineId: string, productId: string): Promise<void> {
+    if (!productId) {
+      setSaleDraft((prev) => ({
+        ...prev,
+        lines: prev.lines.map((line) =>
+          line.id === lineId ? { ...line, productId, unitPrice: "" } : line
+        ),
+      }));
+      return;
+    }
+
+    let unitPrice = "";
+    if (saleDraft.clientId) {
+      try {
+        unitPrice = await resolveUnitPrice(productId, saleDraft.clientId);
+      } catch {
+        // si falla deja vacío
+      }
+    }
+
     setSaleDraft((prev) => ({
       ...prev,
       lines: prev.lines.map((line) =>
-        line.id === lineId ? { ...line, productId } : line
+        line.id === lineId ? { ...line, productId, unitPrice } : line
       ),
     }));
   }
@@ -519,8 +593,14 @@ export default function Sales(): ReactElement {
   async function onSave(printAfterSave: boolean): Promise<void> {
     setError("");
     if (!saleDraft.clientId) {
-      setError("Selecciona un cliente.");
-      return;
+      setModal({
+        show: true,
+        type: "error",
+        title: "Error",
+        message: "Selecciona un cliente.",
+        confirmLabel: "Aceptar",
+        onConfirm: closeModal,
+      }); return;
     }
 
     const cleanedLines = saleDraft.lines
@@ -528,15 +608,48 @@ export default function Sales(): ReactElement {
       .map((line) => ({ productId: line.productId, quantity: line.quantity }));
 
     if (cleanedLines.length === 0) {
-      setError("Debes agregar al menos un producto.");
+      setModal({
+        show: true,
+        type: "error",
+        title: "Error",
+        message: "Debes agregar al menos un producto.",
+        confirmLabel: "Aceptar",
+        onConfirm: closeModal,
+      });
       return;
     }
 
     if (cleanedLines.some((line) => line.quantity <= 0)) {
-      setError("Todas las cantidades deben ser mayores a 0.");
+      setModal({
+        show: true,
+        type: "error",
+        title: "Error",
+        message: "Todas las cantidades deben ser mayores a 0.",
+        confirmLabel: "Aceptar",
+        onConfirm: closeModal,
+      });
       return;
     }
 
+    const paymentsPayload = (Object.keys(paymentDraft) as PaymentMethod[])
+      .filter((method) => paymentDraft[method].enabled)
+      .map((method) => ({ method, amount: Number(paymentDraft[method].amount) }))
+      .filter((payment) => !Number.isNaN(payment.amount) && payment.amount > 0);
+
+    const paid = paymentsPayload.reduce((sum, p) => sum + p.amount, 0);
+
+
+    if (paid > calculatedTotal) {
+      setModal({
+        show: true,
+        type: "error",
+        title: "Error",
+        message: "La suma de pagos no puede superar el total de la factura.",
+        confirmLabel: "Aceptar",
+        onConfirm: closeModal,
+      });
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -547,6 +660,9 @@ export default function Sales(): ReactElement {
       const saved = isEditScreen && id
         ? await updateSale(id, payload)
         : await createSale(payload);
+      if (paymentsPayload.length > 0) {
+        await savePayments(saved.id, paymentsPayload);
+      }
       if (!isEditScreen && saleDraft.status && saleDraft.status !== "PENDING") {
         await changeSaleStatus(saved.id, saleDraft.status);
       }
@@ -561,6 +677,9 @@ export default function Sales(): ReactElement {
       setClientSearch("");
       setSelectedRowId("");
       setLineSearch({});
+      setPaymentDraft(EMPTY_PAYMENTS);
+      setPaymentDraft(EMPTY_PAYMENTS);
+
 
       setModal({
         show: true,
@@ -709,12 +828,56 @@ export default function Sales(): ReactElement {
                 )}
               </div>
             </div>
-            <div className={styles.field}>
-              <label>Método de <u>p</u>ago</label>              <select value={saleDraft.paymentMethod} onChange={onPaymentMethodChange}>
-                <option value="CASH">Efectivo</option>
-                <option value="SINPE">SINPE</option>
-                <option value="TRANSFER">Transferencia</option>
-              </select>
+            <div className={styles.field} style={{ gridColumn: "span 2" }}>
+              <label>Método de <u>P</u>ago</label>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.5rem", marginTop: "0.25rem" }}>
+                {([
+                  { key: "CASH" as PaymentMethod, label: "Efectivo" },
+                  { key: "SINPE" as PaymentMethod, label: "SINPE" },
+                  { key: "TRANSFER" as PaymentMethod, label: "Transferencia" },
+                  { key: "CARD" as PaymentMethod, label: "Tarjeta" },
+                ]).map((item) => (
+                  <div key={item.key} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "0.5rem" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={paymentDraft[item.key].enabled}
+                        onChange={(e) => onPaymentToggle(item.key, e.target.checked)}
+                      />
+                      {item.label}
+                    </label>
+                    {paymentDraft[item.key].enabled && (
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Monto"
+                        value={paymentDraft[item.key].amount}
+                        onChange={(e) => onPaymentAmountChange(item.key, e.target.value)}
+                        style={{ width: "100%", marginTop: "0.25rem" }}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: "0.5rem", fontSize: "0.9rem", color: "#4b5563" }}>
+                Suma pagos: ₡{paymentTotal.toLocaleString('es-CR')} / Total: ₡{calculatedTotal.toLocaleString('es-CR')}
+                {paymentTotal > 0 && paymentTotal < calculatedTotal && (
+                  <span style={{ color: "#b45309", marginLeft: "0.5rem" }}>
+                    ⚠️ Faltante: ₡{(calculatedTotal - paymentTotal).toLocaleString('es-CR')}
+                  </span>
+                )}
+                {paymentTotal > calculatedTotal && (
+                  <span style={{ color: "#dc2626", marginLeft: "0.5rem" }}>
+                    ❌ Excedente: ₡{(paymentTotal - calculatedTotal).toLocaleString('es-CR')}
+                  </span>
+                )}
+                {paymentTotal > 0 && paymentTotal === calculatedTotal && (
+                  <span style={{ color: "#16a34a", marginLeft: "0.5rem" }}>
+                    ✅ Pago completo
+                  </span>
+                )}
+              </div>
             </div>
             <div className={styles.field}>
               <label>Vendedor</label>
@@ -812,7 +975,7 @@ export default function Sales(): ReactElement {
                             }
                             onChange={(e) => {
                               setLineSearch((prev) => ({ ...prev, [line.id]: e.target.value }));
-                              onLineProductChange(line.id, "");
+                              void onLineProductChange(line.id, "");
                               setLineDropdownIndex((prev) => ({ ...prev, [line.id]: -1 }));
                             }}
                             onFocus={(e) => {
@@ -820,7 +983,7 @@ export default function Sales(): ReactElement {
                               const rect = e.currentTarget.getBoundingClientRect();
                               setDropdownPosition({ top: rect.bottom, left: rect.left });
                             }}
-                            onBlur={() => setTimeout(() => setActiveLineId(""), 200)}
+                            onBlur={() => setTimeout(() => setActiveLineId(""), 500)}
                             onKeyDown={(e) => {
                               if (activeLineId !== line.id) return;
                               const options = products
@@ -845,7 +1008,7 @@ export default function Sales(): ReactElement {
                               if (e.key === "Enter" && (lineDropdownIndex[line.id] ?? -1) >= 0) {
                                 e.preventDefault();
                                 const selected = options[lineDropdownIndex[line.id]];
-                                onLineProductChange(line.id, selected.id);
+                                void onLineProductChange(line.id, selected.id);
                                 setLineSearch((prev) => ({ ...prev, [line.id]: "" }));
                                 setActiveLineId("");
                                 setLineDropdownIndex((prev) => ({ ...prev, [line.id]: -1 }));
@@ -881,8 +1044,9 @@ export default function Sales(): ReactElement {
                                       ? { background: "#d1fae5", color: "#16a34a" }
                                       : {}}
                                     onMouseEnter={() => setLineDropdownIndex((prev) => ({ ...prev, [line.id]: index }))}
-                                    onMouseDown={() => {
-                                      onLineProductChange(line.id, p.id);
+                                    onPointerDown={(e) => {
+                                      e.preventDefault(); // 👈 esto evita que el input pierda el foco
+                                      void onLineProductChange(line.id, p.id);
                                       setLineSearch((prev) => ({ ...prev, [line.id]: "" }));
                                       setActiveLineId("");
                                       setLineDropdownIndex((prev) => ({ ...prev, [line.id]: -1 }));

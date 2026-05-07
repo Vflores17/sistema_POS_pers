@@ -1,7 +1,7 @@
 const API_URL = "http://localhost:8080/api/v1";
 
-export type PaymentMethod = "CASH" | "SINPE" | "TRANSFER";
-export type SaleStatus = "PENDING" | "PAID" | "CANCELLED";
+export type PaymentMethod = "CASH" | "SINPE" | "TRANSFER" | "CARD";
+export type SaleStatus = "PENDING" | "PARTIAL" | "PAID" | "CANCELLED";
 
 export interface SaleItemPayload {
   productId: string;
@@ -34,6 +34,20 @@ export interface Sale {
   status: SaleStatus;
   createdAt: string;
   details: SaleDetail[];
+  payments: SalePayment[];
+}
+
+export interface SalePayment {
+  id: string;
+  saleId: string;
+  method: PaymentMethod;
+  amount: number;
+  createdAt?: string;
+}
+
+export interface CreateSalePaymentPayload {
+  method: PaymentMethod;
+  amount: number;
 }
 
 interface ApiResponse<T> {
@@ -138,4 +152,16 @@ export async function changeSaleStatus(id: string, status: SaleStatus): Promise<
     body: JSON.stringify({ status }),
   });
   return parseResponse<Sale>(response, "Failed to update sale status");
+}
+
+export async function savePayments(
+  saleId: string,
+  payments: CreateSalePaymentPayload[]
+): Promise<Sale> {
+  const response = await fetch(`${API_URL}/sales/${saleId}/payments`, {
+    method: "POST",
+    headers: buildHeaders(true),
+    body: JSON.stringify(payments),
+  });
+  return parseResponse<Sale>(response, "Failed to save sale payments");
 }

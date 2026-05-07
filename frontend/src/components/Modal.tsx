@@ -23,7 +23,6 @@ export default function Modal({
     cancelLabel = "Cancelar",
     danger = false, // 👈
 }: ModalProps): ReactElement {
-    console.log("danger:", danger);
 
     useEffect(() => {
         function handleKeyDown(e: KeyboardEvent): void {

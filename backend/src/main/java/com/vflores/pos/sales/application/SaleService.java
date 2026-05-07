@@ -3,12 +3,16 @@ package com.vflores.pos.sales.application;
 import com.vflores.pos.products.domain.model.Product;
 import com.vflores.pos.products.domain.repository.ProductRepository;
 import com.vflores.pos.sales.api.dto.CreateSaleRequest;
+import com.vflores.pos.sales.api.dto.CreateSalePaymentRequest;
 import com.vflores.pos.sales.api.dto.SaleDetailResponse;
 import com.vflores.pos.sales.api.dto.SaleItemRequest;
+import com.vflores.pos.sales.api.dto.SalePaymentResponse;
 import com.vflores.pos.sales.api.dto.SaleResponse;
 import com.vflores.pos.sales.api.dto.UpdateSaleRequest;
 import com.vflores.pos.sales.domain.model.Sale;
 import com.vflores.pos.sales.domain.model.SaleDetail;
+import com.vflores.pos.sales.domain.model.SalePayment;
+import com.vflores.pos.sales.domain.repository.SalePaymentRepository;
 import com.vflores.pos.sales.domain.repository.SaleRepository;
 import com.vflores.pos.shared.exception.ConflictException;
 import com.vflores.pos.shared.exception.ResourceNotFoundException;
@@ -40,6 +44,7 @@ public class SaleService {
     private final ProductRepository productRepository;
     private final ClientRepository clientRepository;
     private final ProductPriceRepository productPriceRepository;
+    private final SalePaymentRepository salePaymentRepository;
     //private SaleMapper saleMapper;
 
     @Transactional(readOnly = true)
@@ -259,7 +264,8 @@ public class SaleService {
                 sale.getPaymentMethod(),
                 sale.getStatus(),
                 sale.getCreatedAt(),
-                details
+                details,
+                mapPayments(sale.getPayments())
         );
     }
 
@@ -308,8 +314,51 @@ public class SaleService {
             saved.getPaymentMethod(),
             saved.getStatus(),
             saved.getCreatedAt(),
-            mapDetails(saved.getDetails())
+            mapDetails(saved.getDetails()),
+            mapPayments(saved.getPayments())
         );
+    }
+
+    @Transactional
+    public SaleResponse savePayments(UUID saleId, List<CreateSalePaymentRequest> payments) {
+        Sale sale = saleRepository.findByIdWithDetails(saleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Sale not found: " + saleId));
+
+        salePaymentRepository.deleteBySaleId(saleId);
+        sale.getPayments().clear();
+
+        BigDecimal paidAmount = BigDecimal.ZERO;
+        if (payments != null) {
+            for (CreateSalePaymentRequest request : payments) {
+                BigDecimal amount = request.amount();
+                if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+                    throw new ConflictException("Payment amount must be greater than 0");
+                }
+
+                SalePayment payment = SalePayment.builder()
+                        .sale(sale)
+                        .method(request.method())
+                        .amount(amount)
+                        .build();
+                sale.getPayments().add(payment);
+                paidAmount = paidAmount.add(amount);
+            }
+        }
+
+        if (paidAmount.compareTo(sale.getTotal()) > 0) {
+            throw new ConflictException("Payment total cannot exceed sale total");
+        }
+
+        if (paidAmount.compareTo(BigDecimal.ZERO) == 0) {
+            sale.setStatus(Sale.SaleStatus.PENDING);
+        } else if (paidAmount.compareTo(sale.getTotal()) < 0) {
+            sale.setStatus(Sale.SaleStatus.PARTIAL);
+        } else {
+            sale.setStatus(Sale.SaleStatus.PAID);
+        }
+
+        Sale saved = saleRepository.save(sale);
+        return toResponse(saved);
     }
 
     private List<SaleDetailResponse> mapDetails(List<SaleDetail> details) {
@@ -320,6 +369,18 @@ public class SaleService {
                         d.getQuantity(),
                         d.getPrice(),
                         d.getSubtotal()
+                ))
+                .toList();
+    }
+
+    private List<SalePaymentResponse> mapPayments(List<SalePayment> payments) {
+        return payments.stream()
+                .map(payment -> new SalePaymentResponse(
+                        payment.getId(),
+                        payment.getSale().getId(),
+                        payment.getMethod(),
+                        payment.getAmount(),
+                        payment.getCreatedAt()
                 ))
                 .toList();
     }

@@ -52,6 +52,10 @@ public class Sale {
     @Builder.Default
     private List<SaleDetail> details = new ArrayList<>();
 
+    @OneToMany(mappedBy = "sale", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<SalePayment> payments = new ArrayList<>();
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @Builder.Default    
@@ -71,11 +75,13 @@ public class Sale {
     public enum PaymentMethod {
         CASH,
         SINPE,
-        TRANSFER
+        TRANSFER,
+        CARD
     }
     
     public enum SaleStatus {
         PENDING,
+        PARTIAL,
         PAID,
         CANCELLED
     }

@@ -1,8 +1,10 @@
 package com.vflores.pos.sales.api;
 
 import com.vflores.pos.sales.api.dto.CreateSaleRequest;
+import com.vflores.pos.sales.api.dto.CreateSalePaymentRequest;
 import com.vflores.pos.sales.api.dto.SaleResponse;
 import com.vflores.pos.sales.api.dto.UpdateSaleRequest;
+import com.vflores.pos.sales.api.dto.UpdateSaleStatusRequest;
 import com.vflores.pos.sales.application.SaleService;
 import com.vflores.pos.shared.response.ApiResponse;
 import jakarta.validation.Valid;
@@ -20,8 +22,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
-
-import com.vflores.pos.sales.api.dto.UpdateSaleStatusRequest;
 import java.util.List;
 import java.util.UUID;
 
@@ -75,5 +75,13 @@ public class SaleController {
     @GetMapping("/next-invoice-number")
     public ResponseEntity<ApiResponse<Long>> getNextInvoiceNumber() {
         return ResponseEntity.ok(ApiResponse.ok(saleService.getNextInvoiceNumber()));
+    }
+
+    @PostMapping("/{id}/payments")
+    public ResponseEntity<ApiResponse<SaleResponse>> savePayments(
+            @PathVariable UUID id,
+            @Valid @RequestBody List<@Valid CreateSalePaymentRequest> payments
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(saleService.savePayments(id, payments)));
     }
 }
