@@ -84,8 +84,11 @@ export default function Sales(): ReactElement {
   const isFormScreen = isNewScreen || isEditScreen;
 
   const selectedRowRef = useRef<HTMLTableRowElement | null>(null);
+  const cellRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
   const [sales, setSales] = useState<Sale[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [saleTotal, setSaleTotal] = useState<number>(0);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
@@ -106,9 +109,11 @@ export default function Sales(): ReactElement {
     name: "", description: "", stock: "0",
     priceDetail: "0",
     priceWholesale: "0",
+    priceNew: "0",
   });
   const [lineSearch, setLineSearch] = useState<Record<string, string>>({});
   const [activeLineId, setActiveLineId] = useState<string>("");
+  const [activeCell, setActiveCell] = useState<{ rowId: string; col: "name" | "quantity" | "price" } | null>(null);
 
   const productsById = useMemo(() => {
     return new Map(products.map((product) => [product.id, product]));
@@ -120,6 +125,7 @@ export default function Sales(): ReactElement {
 
   const [viewProductPrices, setViewProductPrices] = useState<{ type: string; price: number }[]>([]);
 
+
   useEffect(() => {
     if (!isFormScreen) return;
 
@@ -129,7 +135,7 @@ export default function Sales(): ReactElement {
       // F2 → Crear producto
       if (e.key === "F2") {
         e.preventDefault();
-        setProductDraft({ name: "", description: "", stock: "0", priceDetail: "0", priceWholesale: "0" }); // 👈
+        setProductDraft({ name: "", description: "", stock: "0", priceDetail: "0", priceWholesale: "0", priceNew: "0" }); // 👈
         setShowCreateProductModal(true);
       }
       // F3 → Listar productos
@@ -205,7 +211,32 @@ export default function Sales(): ReactElement {
         const input = document.querySelector<HTMLInputElement>("input[placeholder='Buscar cliente...']");
         input?.focus();
       }
-      if (!isInputFocused) {
+      if (activeCell) {
+
+        const lines = saleDraft.lines;
+        const currentRowIndex = lines.findIndex((line) => line.id === activeCell.rowId);
+        const cols: Array<"name" | "quantity" | "price"> = ["name", "quantity", "price"];
+        const currentColIndex = cols.indexOf(activeCell.col);
+
+
+        if (e.key === "ArrowRight" && activeCell.col !== "price") {
+          e.preventDefault();
+          focusCell(activeCell.rowId, cols[currentColIndex + 1]);
+        }
+        if (e.key === "ArrowLeft" && activeCell.col !== "name") {
+          e.preventDefault();
+          focusCell(activeCell.rowId, cols[currentColIndex - 1]);
+        }
+        if (e.key === "Tab") {
+          e.preventDefault();
+          if (currentColIndex < cols.length - 1) {
+            focusCell(activeCell.rowId, cols[currentColIndex + 1]);
+          } else {
+            const nextRow = lines[currentRowIndex + 1];
+            if (nextRow) focusCell(nextRow.id, "name");
+          }
+        }
+      } else if (!isInputFocused) {
         if (e.key === "ArrowDown") {
           e.preventDefault();
           const lines = saleDraft.lines;
@@ -220,12 +251,12 @@ export default function Sales(): ReactElement {
           const prevIndex = Math.max(currentIndex - 1, 0);
           setSelectedRowId(lines[prevIndex]?.id ?? "");
         }
+      }
 
-        if (e.key === "Escape" && viewProduct) {
-          e.preventDefault();
-          setViewProduct(null);
-          setViewProductPrices([]); // 👈
-        }
+      if (e.key === "Escape" && viewProduct) {
+        e.preventDefault();
+        setViewProduct(null);
+        setViewProductPrices([]);
       }
     }
 
@@ -368,11 +399,21 @@ export default function Sales(): ReactElement {
 
   async function resolveUnitPrice(productId: string, clientId: string): Promise<string> {
     const client = clientsById.get(clientId);
-    const priceType = client?.type === "WHOLESALE" ? "WHOLESALE" : "DETAIL";
-    const prices = await getProductPrices(productId);
-    const match = prices.find((p) => p.type === priceType);
-    if (!match) throw new Error("No existe precio para el tipo de cliente.");
-    return String(match.price);
+    const priceType = client?.type === "WHOLESALE"
+      ? "WHOLESALE"
+      : client?.type === "NEW"
+        ? "NEW"
+        : "DETAIL";
+
+    try {
+      const prices = await getProductPrices(productId);
+      const match = prices.find((p) => p.type === priceType);
+      if (!match) throw new Error("No existe precio para el tipo de cliente.");
+      return String(match.price);
+    } catch (error) {
+      console.error("error en getProductPrices:", error instanceof Error ? error.message : error);
+      throw error;
+    }
   }
   const paymentTotal = useMemo(() => {
     return (Object.keys(paymentDraft) as PaymentMethod[]).reduce((sum, method) => {
@@ -416,6 +457,7 @@ export default function Sales(): ReactElement {
     stock: string;
     priceDetail: string;
     priceWholesale: string;
+    priceNew: string;
   }
 
 
@@ -441,18 +483,34 @@ export default function Sales(): ReactElement {
         if (isEditScreen && id) {
           const sale = await getSaleById(id);
           setInvoiceNumber(sale.invoiceNumber);
+          setSaleTotal(Number(sale.total));
           setSaleDraft({
             clientId: sale.clientId,
             paymentMethod: sale.paymentMethod,
-            status: sale.status, // 👈
             lines: sale.details.map((detail) => ({
               id: detail.id ?? crypto.randomUUID(),
               productId: detail.productId,
               quantity: detail.quantity,
-              unitPrice: "",
+              unitPrice: String(detail.price),
             })),
             comments: "",
+            status: sale.status,
           });
+
+          // 👈 cargar pagos existentes
+          const nextPayments: PaymentDraftState = {
+            CASH: { enabled: false, amount: "" },
+            SINPE: { enabled: false, amount: "" },
+            TRANSFER: { enabled: false, amount: "" },
+            CARD: { enabled: false, amount: "" },
+          };
+          for (const payment of sale.payments ?? []) {
+            nextPayments[payment.method] = {
+              enabled: true,
+              amount: String(payment.amount),
+            };
+          }
+          setPaymentDraft(nextPayments);
         } else {
           const next = await getNextInvoiceNumber();
           setInvoiceNumber(next);
@@ -486,6 +544,7 @@ export default function Sales(): ReactElement {
   }
 
   async function onLineProductChange(lineId: string, productId: string): Promise<void> {
+    console.log("onLineProductChange called", { productId, clientId: saleDraft.clientId });
     if (!productId) {
       setSaleDraft((prev) => ({
         ...prev,
@@ -500,8 +559,8 @@ export default function Sales(): ReactElement {
     if (saleDraft.clientId) {
       try {
         unitPrice = await resolveUnitPrice(productId, saleDraft.clientId);
+        console.log("s resolvio el precio");
       } catch {
-        // si falla deja vacío
       }
     }
 
@@ -551,6 +610,9 @@ export default function Sales(): ReactElement {
       setError("Selecciona una fila para eliminar.");
       return;
     }
+
+
+
     setSaleDraft((prev) => {
       const remaining = prev.lines.filter((line) => line.id !== selectedRowId);
       return {
@@ -559,6 +621,15 @@ export default function Sales(): ReactElement {
       };
     });
     setSelectedRowId("");
+  }
+
+  function focusCell(rowId: string, col: "name" | "quantity" | "price"): void {
+    setActiveCell({ rowId, col });
+    setTimeout(() => {
+      const key = `${rowId}-${col}`;
+      cellRefs.current[key]?.focus();
+      cellRefs.current[key]?.select();
+    }, 0);
   }
 
   function onLinePriceChange(lineId: string, price: string): void {
@@ -570,20 +641,30 @@ export default function Sales(): ReactElement {
     }));
   }
 
-  function addProductFromModal(productId: string): void {
+  async function addProductFromModal(productId: string): Promise<void> {
+    if (!saleDraft.clientId) {
+      setError("Selecciona un cliente primero.");
+      return;
+    }
+
+    let unitPrice = "";
+    try {
+      unitPrice = await resolveUnitPrice(productId, saleDraft.clientId);
+    } catch {
+      // si falla deja vacío
+    }
+
     setSaleDraft((prev) => {
       const lines = prev.lines;
-      // Si hay una sola fila y está vacía, reemplázala
       if (lines.length === 1 && lines[0].productId === "") {
         return {
           ...prev,
-          lines: [{ id: lines[0].id, productId, quantity: 1, unitPrice: "" }]
+          lines: [{ id: lines[0].id, productId, quantity: 1, unitPrice }]
         };
       }
-      // Si no, agrega al final
       return {
         ...prev,
-        lines: [...lines, { id: crypto.randomUUID(), productId, quantity: 1, unitPrice: "" }],
+        lines: [...lines, { id: crypto.randomUUID(), productId, quantity: 1, unitPrice }],
       };
     });
     setShowProductModal(false);
@@ -637,9 +718,10 @@ export default function Sales(): ReactElement {
       .filter((payment) => !Number.isNaN(payment.amount) && payment.amount > 0);
 
     const paid = paymentsPayload.reduce((sum, p) => sum + p.amount, 0);
+    const totalToCompare = isEditScreen ? saleTotal : calculatedTotal;
 
 
-    if (paid > calculatedTotal) {
+    if (paid > totalToCompare) {
       setModal({
         show: true,
         type: "error",
@@ -660,6 +742,19 @@ export default function Sales(): ReactElement {
       const saved = isEditScreen && id
         ? await updateSale(id, payload)
         : await createSale(payload);
+      const realTotal = Number(saved.total); // 👈 total real del backend
+      const paidAmount = paymentsPayload.reduce((sum, p) => sum + p.amount, 0);
+      if (paidAmount > realTotal) {
+        setModal({
+          show: true,
+          type: "error",
+          title: "Error",
+          message: `La suma de pagos (₡${paidAmount.toLocaleString('es-CR')}) no puede superar el total real de la factura (₡${realTotal.toLocaleString('es-CR')}).`,
+          confirmLabel: "Aceptar",
+          onConfirm: closeModal,
+        });
+        return;
+      }
       if (paymentsPayload.length > 0) {
         await savePayments(saved.id, paymentsPayload);
       }
@@ -768,7 +863,8 @@ export default function Sales(): ReactElement {
               <div className={styles.invoiceNumber}>{invoiceNumber || "—"}</div>
             </div>
             <div className={styles.field}>
-              <label><u>B</u>uscar cliente</label>              <div style={{ position: "relative", zIndex: 50 }}>
+              <label><u>B</u>uscar cliente</label>
+              <div style={{ position: "relative", zIndex: 50 }}>
                 <input
                   value={clientSearch}
                   onChange={(e) => {
@@ -980,6 +1076,8 @@ export default function Sales(): ReactElement {
                             }}
                             onFocus={(e) => {
                               setActiveLineId(line.id);
+                              setSelectedRowId(line.id);
+                              setActiveCell({ rowId: line.id, col: "name" });
                               const rect = e.currentTarget.getBoundingClientRect();
                               setDropdownPosition({ top: rect.bottom, left: rect.left });
                             }}
@@ -1017,6 +1115,11 @@ export default function Sales(): ReactElement {
                                 setActiveLineId("");
                                 setLineDropdownIndex((prev) => ({ ...prev, [line.id]: -1 }));
                               }
+                              // 👈 aquí
+                              if (e.key === "ArrowRight" && (lineDropdownIndex[line.id] ?? -1) < 0) {
+                                e.preventDefault();
+                                focusCell(line.id, "quantity");
+                              }
                             }}
                             style={{ width: "180px" }}
                           />
@@ -1028,7 +1131,8 @@ export default function Sales(): ReactElement {
                                 top: dropdownPosition?.top ?? 0,
                                 left: dropdownPosition?.left ?? 0,
                                 zIndex: 9999,
-                                width: "200px"
+                                width: "200px",
+                                pointerEvents: "all" // 👈
                               }}
                             >
                               {products
@@ -1044,8 +1148,8 @@ export default function Sales(): ReactElement {
                                       ? { background: "#d1fae5", color: "#16a34a" }
                                       : {}}
                                     onMouseEnter={() => setLineDropdownIndex((prev) => ({ ...prev, [line.id]: index }))}
-                                    onPointerDown={(e) => {
-                                      e.preventDefault(); // 👈 esto evita que el input pierda el foco
+                                    onMouseDown={() => {
+                                      console.log("mousedown fired", p.id);
                                       void onLineProductChange(line.id, p.id);
                                       setLineSearch((prev) => ({ ...prev, [line.id]: "" }));
                                       setActiveLineId("");
@@ -1060,21 +1164,72 @@ export default function Sales(): ReactElement {
                         </td>
                         <td>
                           <input
+                            ref={(el) => { cellRefs.current[`${line.id}-quantity`] = el; }}
                             type="number"
                             min={1}
                             step={1}
                             value={line.quantity}
+                            onFocus={() => {
+                              setSelectedRowId(line.id);
+                              setActiveCell({ rowId: line.id, col: "quantity" });
+                            }}
+                            onBlur={() => setActiveCell(null)}
                             onChange={(event) => onLineQuantityChange(line.id, event.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "ArrowRight") {
+                                e.preventDefault();
+                                focusCell(line.id, "price");
+                              }
+                              if (e.key === "ArrowLeft") {
+                                e.preventDefault();
+                                focusCell(line.id, "name");
+                              }
+                              if (e.key === "ArrowDown") {
+                                e.preventDefault();
+                                const lines = saleDraft.lines;
+                                const idx = lines.findIndex((l) => l.id === line.id);
+                                if (lines[idx + 1]) focusCell(lines[idx + 1].id, "quantity");
+                              }
+                              if (e.key === "ArrowUp") {
+                                e.preventDefault();
+                                const lines = saleDraft.lines;
+                                const idx = lines.findIndex((l) => l.id === line.id);
+                                if (lines[idx - 1]) focusCell(lines[idx - 1].id, "quantity");
+                              }
+                            }}
                           />
                         </td>
-                        <td>
+                        <td>  {/* 👈 td separado para precio */}
                           <input
+                            ref={(el) => { cellRefs.current[`${line.id}-price`] = el; }}
                             type="number"
                             min="0"
                             step="0.01"
                             value={line.unitPrice !== "" ? line.unitPrice : unitPrice}
+                            onFocus={() => {
+                              setSelectedRowId(line.id);
+                              setActiveCell({ rowId: line.id, col: "price" });
+                            }}
+                            onBlur={() => setActiveCell(null)}
                             onChange={(e) => onLinePriceChange(line.id, e.target.value)}
-                            style={{ width: "90px" }}
+                            onKeyDown={(e) => {
+                              if (e.key === "ArrowLeft") {
+                                e.preventDefault();
+                                focusCell(line.id, "quantity");
+                              }
+                              if (e.key === "ArrowDown") {
+                                e.preventDefault();
+                                const lines = saleDraft.lines;
+                                const idx = lines.findIndex((l) => l.id === line.id);
+                                if (lines[idx + 1]) focusCell(lines[idx + 1].id, "price");
+                              }
+                              if (e.key === "ArrowUp") {
+                                e.preventDefault();
+                                const lines = saleDraft.lines;
+                                const idx = lines.findIndex((l) => l.id === line.id);
+                                if (lines[idx - 1]) focusCell(lines[idx - 1].id, "price");
+                              }
+                            }}
                           />
                         </td>
                         <td>{(unitPrice * line.quantity).toLocaleString('es-CR')}</td>
@@ -1174,6 +1329,14 @@ export default function Sales(): ReactElement {
                       }}
                     />
                   </div>
+                  <div className={styles.field}>
+                    <label>Precio Nuevo</label>
+                    <input
+                      type="number" min="0"
+                      value={productDraft.priceNew}
+                      onChange={(e) => setProductDraft(prev => ({ ...prev, priceNew: e.target.value }))}
+                    />
+                  </div>
                 </div>
 
                 <div className={styles.formBottomBar} style={{ background: "transparent", padding: 0 }}>
@@ -1194,6 +1357,8 @@ export default function Sales(): ReactElement {
                         // 👈 Crear precios
                         await createProductPrice(created.id, "DETAIL", Number(productDraft.priceDetail));
                         await createProductPrice(created.id, "WHOLESALE", Number(productDraft.priceWholesale));
+                        await createProductPrice(created.id, "NEW", Number(productDraft.priceNew));
+
 
                         const updated = await listProducts();
                         setProducts(updated);
@@ -1204,7 +1369,7 @@ export default function Sales(): ReactElement {
                             { id: crypto.randomUUID(), productId: created.id, quantity: 1, unitPrice: "" }
                           ]
                         }));
-                        setProductDraft({ name: "", description: "", stock: "0", priceDetail: "0", priceWholesale: "0" });
+                        setProductDraft({ name: "", description: "", stock: "0", priceDetail: "0", priceWholesale: "0", priceNew: "0" });
                         setShowCreateProductModal(false);
                         setModal({
                           show: true,

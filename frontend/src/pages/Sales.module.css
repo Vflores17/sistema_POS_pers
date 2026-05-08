@@ -101,6 +101,8 @@
   white-space: nowrap;
   color: #1f2937;
   text-align: center;
+  font-size: 1rem;
+  /* 👈 agregar */
 }
 
 .status {
@@ -499,7 +501,7 @@ kbd {
 
 .gridScrollArea {
   flex: 1;
-  max-height: 350px;
+  max-height: 422px;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   background: white;
@@ -520,4 +522,9 @@ kbd {
   overflow: hidden;
   margin: 3rem auto;
   height: calc(78vh - 2rem);
+}
+
+.gridScrollArea input[type="number"],
+.gridScrollArea input[type="text"] {
+  font-size: 1rem;
 }

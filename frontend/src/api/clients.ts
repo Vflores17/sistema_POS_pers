@@ -1,6 +1,6 @@
 const API_URL = "http://localhost:8080/api/v1";
 
-export type ClientType = "DETAIL" | "WHOLESALE";
+export type ClientType = "DETAIL" | "WHOLESALE" | "NEW";
 export type ClientStatus = "ACTIVE" | "INACTIVE";
 
 export interface Client {
@@ -44,12 +44,12 @@ function buildHeaders(includeJson: boolean): HeadersInit {
   const token = getToken();
   return includeJson
     ? {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      }
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    }
     : {
-        Authorization: `Bearer ${token}`,
-      };
+      Authorization: `Bearer ${token}`,
+    };
 }
 
 export async function listClients(): Promise<Client[]> {

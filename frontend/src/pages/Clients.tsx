@@ -161,6 +161,7 @@ export default function Clients(): ReactElement {
             <select id="type" name="type" value={form.type} onChange={onInputChange}>
               <option value="DETAIL">DETAIL</option>
               <option value="WHOLESALE">WHOLESALE</option>
+              <option value="NEW">NEW</option>
             </select>
           </div>
 
@@ -214,18 +215,16 @@ export default function Clients(): ReactElement {
                   <td>{client.phone || "-"}</td>
                   <td>
                     <span
-                      className={`${styles.badge} ${
-                        client.type === "DETAIL" ? styles.detail : styles.wholesale
-                      }`}
+                      className={`${styles.badge} ${client.type === "DETAIL" ? styles.detail : styles.wholesale
+                        }`}
                     >
                       {client.type}
                     </span>
                   </td>
                   <td>
                     <span
-                      className={`${styles.badge} ${
-                        client.status === "ACTIVE" ? styles.active : styles.inactive
-                      }`}
+                      className={`${styles.badge} ${client.status === "ACTIVE" ? styles.active : styles.inactive
+                        }`}
                     >
                       {client.status}
                     </span>

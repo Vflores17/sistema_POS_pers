@@ -113,7 +113,7 @@ export async function deleteProduct(id: string): Promise<void> {
 
 export async function createProductPrice(
   productId: string,
-  type: "DETAIL" | "WHOLESALE",
+  type: "DETAIL" | "WHOLESALE" | "NEW",
   price: number
 ): Promise<void> {
   const response = await fetch(`${API_URL}/products/${productId}/prices`, {

@@ -144,6 +144,7 @@ public class SaleService {
         switch (clientType) {
             case DETAIL -> priceType = ProductPriceType.DETAIL;
             case WHOLESALE -> priceType = ProductPriceType.WHOLESALE;
+            case NEW -> priceType = ProductPriceType.NEW; // 👈
             default -> throw new IllegalStateException("Unknown client type: " + clientType);
         }
         Map<UUID, Integer> requestedQuantities = aggregateRequestedQuantities(items);
