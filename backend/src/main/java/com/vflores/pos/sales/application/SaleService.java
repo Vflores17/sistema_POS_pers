@@ -345,10 +345,10 @@ public class SaleService {
                 paidAmount = paidAmount.add(amount);
             }
         }
-
+        /*
         if (paidAmount.compareTo(sale.getTotal()) > 0) {
             throw new ConflictException("Payment total cannot exceed sale total");
-        }
+        }*/
 
         if (paidAmount.compareTo(BigDecimal.ZERO) == 0) {
             sale.setStatus(Sale.SaleStatus.PENDING);

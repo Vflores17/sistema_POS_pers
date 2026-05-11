@@ -29,7 +29,6 @@ interface LineDraft {
   unitPrice: string;
 }
 
-// Estado del modal
 interface ModalState {
   show: boolean;
   type: "success" | "error" | "confirm" | "warning";
@@ -71,9 +70,33 @@ const EMPTY_PAYMENTS: PaymentDraftState = {
   CARD: { enabled: false, amount: "" },
 };
 
+interface CajaState {
+  abierta: boolean;
+  montoInicial: number;
+  horaInicio: string;
+  facturaIds: string[];
+}
 
+const CAJA_STORAGE_KEY = "caja_state";
+
+function loadCaja(): CajaState {
+  try {
+    const stored = localStorage.getItem(CAJA_STORAGE_KEY);
+    if (stored) return JSON.parse(stored) as CajaState;
+  } catch {
+    // si falla retorna cerrada
+  }
+  return { abierta: false, montoInicial: 0, horaInicio: "", facturaIds: [] };
+}
+
+function saveCaja(caja: CajaState): void {
+  localStorage.setItem(CAJA_STORAGE_KEY, JSON.stringify(caja));
+}
 
 export default function Sales(): ReactElement {
+  const [caja, setCaja] = useState<CajaState>(loadCaja);
+  const [showAbrirCajaModal, setShowAbrirCajaModal] = useState<boolean>(false);
+  const [montoInicialDraft, setMontoInicialDraft] = useState<string>("30000");
   const [modal, setModal] = useState<ModalState>({ show: false, type: "success", title: "", message: "" });
 
   const [productModalIndex, setProductModalIndex] = useState<number>(-1);
@@ -126,9 +149,90 @@ export default function Sales(): ReactElement {
   const [viewProductPrices, setViewProductPrices] = useState<{ type: string; price: number }[]>([]);
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
-  const [showDateFilter, setShowDateFilter] = useState<boolean>(false);
 
+  function abrirCaja(): void {
+    if (!montoInicialDraft) {
+      setModal({
+        show: true,
+        type: "error",
+        title: "Error",
+        message: "Ingresa el monto inicial de efectivo.",
+        confirmLabel: "Aceptar",
+        onConfirm: closeModal,
+      });
+      return;
+    }
+    const nuevaCaja: CajaState = {
+      abierta: true,
+      montoInicial: Number(montoInicialDraft),
+      horaInicio: new Date().toLocaleString('es-CR'),
+      facturaIds: [],
+    };
+    setCaja(nuevaCaja);
+    saveCaja(nuevaCaja);
+    setMontoInicialDraft("");
+    setShowAbrirCajaModal(false);
+  }
 
+  function cerrarCaja(): void {
+    const facturasDeTurno = sales.filter((sale) => caja.facturaIds.includes(sale.id));
+
+    const totalEfectivo = facturasDeTurno.reduce((sum, s) => {
+      const pagos = s.payments?.filter(p => p.method === "CASH") ?? [];
+      return sum + pagos.reduce((a, p) => a + Number(p.amount), 0);
+    }, 0);
+
+    const totalSinpe = facturasDeTurno.reduce((sum, s) => {
+      const pagos = s.payments?.filter(p => p.method === "SINPE") ?? [];
+      return sum + pagos.reduce((a, p) => a + Number(p.amount), 0);
+    }, 0);
+
+    const totalTransferencia = facturasDeTurno.reduce((sum, s) => {
+      const pagos = s.payments?.filter(p => p.method === "TRANSFER") ?? [];
+      return sum + pagos.reduce((a, p) => a + Number(p.amount), 0);
+    }, 0);
+
+    const totalTarjeta = facturasDeTurno.reduce((sum, s) => {
+      const pagos = s.payments?.filter(p => p.method === "CARD") ?? [];
+      return sum + pagos.reduce((a, p) => a + Number(p.amount), 0);
+    }, 0);
+    const horaInicio = caja.horaInicio;
+    const mensaje = `
+🕐 Inicio: ${horaInicio}
+💵 Monto inicial: ₡${caja.montoInicial.toLocaleString('es-CR')}
+
+📋 Facturas del turno: ${facturasDeTurno.length}
+
+💰 Efectivo: ₡${totalEfectivo.toLocaleString('es-CR')}
+📱 SINPE: ₡${totalSinpe.toLocaleString('es-CR')}
+🏦 Transferencia: ₡${totalTransferencia.toLocaleString('es-CR')}
+💳 Tarjeta: ₡${totalTarjeta.toLocaleString('es-CR')}
+
+⚠️ Recuerde vaciar la memoria del datáfono.
+  `.trim();
+
+    setModal({
+      show: true,
+      type: "success",
+      title: "Cierre de Caja",
+      message: mensaje,
+      confirmLabel: "Imprimir y Cerrar",
+      cancelLabel: "Cancelar",
+      onConfirm: () => {
+        closeModal();
+        window.print();
+        const cajaCerrada: CajaState = {
+          abierta: false,
+          montoInicial: 0,
+          horaInicio: "",
+          facturaIds: [],
+        };
+        setCaja(cajaCerrada);
+        saveCaja(cajaCerrada);
+      },
+      onCancel: closeModal,
+    });
+  }
   useEffect(() => {
     if (!isFormScreen) return;
 
@@ -278,7 +382,7 @@ export default function Sales(): ReactElement {
         setProductModalSearch("");
       }
 
-      if (e.key === "Enter") {  // 👈
+      if (e.key === "Enter") {
         e.preventDefault();
         document.querySelector<HTMLButtonElement>("#saveProductBtn")?.click();
       }
@@ -434,6 +538,10 @@ export default function Sales(): ReactElement {
   const [amountValue, setAmountValue] = useState<string>("");
   const [activeAmountOperator, setActiveAmountOperator] = useState<">=" | "<=" | "=">(">=");
   const [activeAmountValue, setActiveAmountValue] = useState<string>("");
+  const [clientFilterSearch, setClientFilterSearch] = useState<string>("");
+  const [activeClientId, setActiveClientId] = useState<string>("");
+  const [showClientFilterDropdown, setShowClientFilterDropdown] = useState<boolean>(false);
+  const [clientFilterDropdownIndex, setClientFilterDropdownIndex] = useState<number>(-1);
 
   const sortedAndFilteredSales = useMemo(() => {
     let result = sales;
@@ -461,6 +569,9 @@ export default function Sales(): ReactElement {
         return total === amount;
       });
     }
+    if (activeClientId) {
+      result = result.filter((sale) => sale.clientId === activeClientId);
+    }
     return [...result].sort((a, b) => {
       let comparison = 0;
       if (activeSortBy === "invoiceNumber") {
@@ -476,7 +587,7 @@ export default function Sales(): ReactElement {
       }
       return activeSortDir === "asc" ? comparison : -comparison;
     });
-  }, [sales, activeSortBy, activeSortDir, activeStatusFilter, clientsById, activeDateFrom, activeDateTo, activeAmountOperator, activeAmountValue]);
+  }, [sales, activeSortBy, activeSortDir, activeStatusFilter, clientsById, activeDateFrom, activeDateTo, activeAmountOperator, activeAmountValue, activeClientId]);
 
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
 
@@ -776,17 +887,10 @@ export default function Sales(): ReactElement {
         ? await updateSale(id, payload)
         : await createSale(payload);
       const realTotal = Number(saved.total); // 👈 total real del backend
-      const paidAmount = paymentsPayload.reduce((sum, p) => sum + p.amount, 0);
-      if (paidAmount > realTotal) {
-        setModal({
-          show: true,
-          type: "error",
-          title: "Error",
-          message: `La suma de pagos (₡${paidAmount.toLocaleString('es-CR')}) no puede superar el total real de la factura (₡${realTotal.toLocaleString('es-CR')}).`,
-          confirmLabel: "Aceptar",
-          onConfirm: closeModal,
-        });
-        return;
+      if (!isEditScreen && caja.abierta) {
+        const updatedCaja = { ...caja, facturaIds: [...caja.facturaIds, saved.id] };
+        setCaja(updatedCaja);
+        saveCaja(updatedCaja);
       }
       if (paymentsPayload.length > 0) {
         await savePayments(saved.id, paymentsPayload);
@@ -1621,6 +1725,9 @@ export default function Sales(): ReactElement {
               setSortBy(e.target.value as SortBy);
               setDateFrom("");
               setDateTo("");
+              setAmountValue("");        // 👈
+              setClientFilterSearch(""); // 👈
+              setActiveClientId("");     // 👈
             }}>
               <option value="invoiceNumber">Nro Factura</option>
               <option value="createdAt">Fecha</option>
@@ -1691,6 +1798,72 @@ export default function Sales(): ReactElement {
               </div>
             </div>
           )}
+          {sortBy === "client" && (
+            <div className={styles.field} style={{ position: "relative" }}>
+              <label>Cliente</label>
+              <input
+                type="text"
+                placeholder="Buscar cliente..."
+                value={clientFilterSearch}
+                autoComplete="off"
+                onChange={(e) => {
+                  setClientFilterSearch(e.target.value);
+                  setActiveClientId("");
+                  setShowClientFilterDropdown(true);
+                  setClientFilterDropdownIndex(-1);
+                }}
+                onFocus={() => setShowClientFilterDropdown(true)}
+                onBlur={() => setTimeout(() => setShowClientFilterDropdown(false), 200)}
+                onKeyDown={(e) => {
+                  const options = clients
+                    .filter((c) => c.name.toLowerCase().includes(clientFilterSearch.toLowerCase()))
+                    .slice(0, 6);
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setClientFilterDropdownIndex((prev) => Math.min(prev + 1, options.length - 1));
+                  }
+                  if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setClientFilterDropdownIndex((prev) => Math.max(prev - 1, 0));
+                  }
+                  if (e.key === "Enter" && clientFilterDropdownIndex >= 0) {
+                    e.preventDefault();
+                    const selected = options[clientFilterDropdownIndex];
+                    setClientFilterSearch(selected.name);
+                    setActiveClientId(selected.id);
+                    setShowClientFilterDropdown(false);
+                    setClientFilterDropdownIndex(-1);
+                  }
+                  if (e.key === "Escape") {
+                    setShowClientFilterDropdown(false);
+                  }
+                }}
+              />
+              {showClientFilterDropdown && clientFilterSearch && (
+                <div className={styles.clientDropdown}>
+                  {clients
+                    .filter((c) => c.name.toLowerCase().includes(clientFilterSearch.toLowerCase()))
+                    .slice(0, 6)
+                    .map((client, index) => (
+                      <div
+                        key={client.id}
+                        className={styles.clientOption}
+                        style={index === clientFilterDropdownIndex ? { background: "#d1fae5", color: "#16a34a" } : {}}
+                        onMouseDown={() => {
+                          setClientFilterSearch(client.name);
+                          setActiveClientId(client.id);
+                          setShowClientFilterDropdown(false);
+                          setClientFilterDropdownIndex(-1);
+                        }}
+                        onMouseEnter={() => setClientFilterDropdownIndex(index)}
+                      >
+                        {client.name}
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
           <button className={styles.primaryButton} type="button" onClick={() => {
             setActiveSortBy(sortBy);
             setActiveSortDir(sortDir);
@@ -1715,6 +1888,9 @@ export default function Sales(): ReactElement {
             setActiveDateTo("");
             setActiveAmountOperator(">=");
             setActiveAmountValue("");
+            setClientSearch2("");
+            setClientFilterSearch("");
+            setActiveClientId("");
 
 
           }}>
@@ -1762,40 +1938,58 @@ export default function Sales(): ReactElement {
         <div className={styles.bottomBar}>
           <div className={styles.bottomActions}>
             <button className={styles.primaryButton} type="button"
+              disabled={!caja.abierta}
               onClick={() => navigate("/sales/new")}>
               Crear
             </button>
             <button className={styles.button} type="button"
-              disabled={!selectedRowId}
+              disabled={!caja.abierta || !selectedRowId}
               onClick={() => selectedRowId && navigate(`/sales/${selectedRowId}/edit`)}>
               Modificar
             </button>
             <button className={styles.button} type="button"
-              disabled={!selectedRowId}
+              disabled={!caja.abierta || !selectedRowId}
               onClick={() => selectedRowId && navigate(`/sales/${selectedRowId}/edit`)}>
               Ver Factura
             </button>
             <button className={styles.button} type="button"
-              disabled={!selectedRowId}
+              disabled={!caja.abierta || !selectedRowId}
               onClick={() => { if (selectedRowId) window.print(); }}>
               Imprimir
             </button>
             <button className={styles.dangerButton} type="button"
-              disabled={!selectedRowId}
+              disabled={!caja.abierta || !selectedRowId}
               onClick={() => selectedRowId && void onDeleteSale(selectedRowId)}>
               Eliminar
             </button>
             <button className={styles.primaryButton} type="button"
-              disabled={!selectedRowId || selectedSale?.status !== "PENDING"}
+              disabled={!caja.abierta || !selectedRowId || selectedSale?.status !== "PENDING"}
               onClick={() => selectedRowId && void onMarkAsPaid(selectedRowId)}>
               Pagar
             </button>
           </div>
           <div className={styles.bottomGlobal}>
-            <button className={styles.button} type="button" onClick={closeRegister}>
-              Cierre de caja
+            <button
+              className={styles.primaryButton}
+              type="button"
+              disabled={caja.abierta}
+              onClick={() => setShowAbrirCajaModal(true)}
+            >
+              Iniciar Caja
             </button>
-            <button className={styles.button} type="button" onClick={() => navigate("/dashboard")}>
+            <button
+              className={styles.button}
+              type="button"
+              disabled={!caja.abierta}
+              onClick={cerrarCaja}
+            >
+              Cierre de Caja
+            </button>
+            <button
+              className={styles.button}
+              type="button"
+              onClick={() => navigate("/dashboard")}
+            >
               Salir
             </button>
           </div>
@@ -1811,6 +2005,56 @@ export default function Sales(): ReactElement {
             cancelLabel={modal.cancelLabel}
             danger={modal.danger}
           />
+        )}
+        {showAbrirCajaModal && (
+          <div className={styles.modalBackdrop}>
+            <div className={styles.modal}>
+              <header className={styles.modalHeader}>
+                <h3>Iniciar Caja</h3>
+                <button className={styles.button} type="button" onClick={() => setShowAbrirCajaModal(false)}>
+                  Cerrar
+                </button>
+              </header>
+              <div className={styles.field}>
+                <label>Monto inicial de efectivo</label>
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                  <input
+                    type="number"
+                    min="0"
+                    autoFocus
+                    value={montoInicialDraft}
+                    onChange={(e) => setMontoInicialDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") abrirCaja();
+                      if (e.key === "Escape") setShowAbrirCajaModal(false);
+                    }}
+                    placeholder="₡0"
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    className={styles.button}
+                    type="button"
+                    onClick={() => setMontoInicialDraft("30000")}
+                    style={{ fontSize: "0.75rem", padding: "0.3rem 0.6rem" }}
+                  >
+                    Restablecer
+                  </button>
+                </div>
+                <span style={{ fontSize: "0.78rem", color: "#6b7280" }}>Por defecto: ₡30,000</span>
+              </div>
+              <p style={{ color: "#b45309", fontSize: "0.9rem", margin: "0.5rem 0" }}>
+                ⚠️ Recuerde vaciar la memoria del datáfono antes de iniciar.
+              </p>
+              <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
+                <button className={styles.primaryButton} type="button" onClick={abrirCaja}>
+                  Iniciar Caja
+                </button>
+                <button className={styles.button} type="button" onClick={() => setShowAbrirCajaModal(false)}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </section>
     </div>

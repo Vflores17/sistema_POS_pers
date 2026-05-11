@@ -51,8 +51,7 @@ export default function Modal({
             <div className={`${styles.modal} ${styles[type]}`}>
                 <div className={styles.icon}>{icon}</div>
                 <h3 className={styles.title}>{title}</h3>
-                <p className={styles.message}>{message}</p>
-                <div className={styles.actions}>
+                <p className={styles.message} style={{ whiteSpace: "pre-line" }}>{message}</p>                <div className={styles.actions}>
                     {onCancel && (
                         <button className={styles.cancelButton} type="button" onClick={onCancel}>
                             {cancelLabel} <kbd>Esc</kbd>
