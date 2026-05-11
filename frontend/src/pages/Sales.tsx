@@ -124,6 +124,9 @@ export default function Sales(): ReactElement {
   const [viewProduct, setViewProduct] = useState<Product | null>(null);
 
   const [viewProductPrices, setViewProductPrices] = useState<{ type: string; price: number }[]>([]);
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+  const [showDateFilter, setShowDateFilter] = useState<boolean>(false);
 
 
   useEffect(() => {
@@ -422,28 +425,58 @@ export default function Sales(): ReactElement {
       return sum + (Number.isNaN(amount) ? 0 : amount);
     }, 0);
   }, [paymentDraft]);
+  const [activeDateFrom, setActiveDateFrom] = useState<string>("");
+  const [activeDateTo, setActiveDateTo] = useState<string>("");
+  const [activeSortBy, setActiveSortBy] = useState<SortBy>("createdAt");
+  const [activeSortDir, setActiveSortDir] = useState<"asc" | "desc">("desc");
+  const [activeStatusFilter, setActiveStatusFilter] = useState<StatusFilter>("ALL");
+  const [amountOperator, setAmountOperator] = useState<">=" | "<=" | "=">(">=");
+  const [amountValue, setAmountValue] = useState<string>("");
+  const [activeAmountOperator, setActiveAmountOperator] = useState<">=" | "<=" | "=">(">=");
+  const [activeAmountValue, setActiveAmountValue] = useState<string>("");
 
   const sortedAndFilteredSales = useMemo(() => {
     let result = sales;
-    if (statusFilter !== "ALL") {
-      result = result.filter((sale) => sale.status === statusFilter);
+    if (activeStatusFilter !== "ALL") {
+      result = result.filter((sale) => sale.status === activeStatusFilter);
+    }
+    if (activeDateFrom) {
+      result = result.filter((sale) => {
+        const saleDateCR = new Date(new Date(sale.createdAt).getTime() - 6 * 60 * 60 * 1000);
+        return saleDateCR.toISOString().slice(0, 10) >= activeDateFrom;
+      });
+    }
+    if (activeDateTo) {
+      result = result.filter((sale) => {
+        const saleDateCR = new Date(new Date(sale.createdAt).getTime() - 6 * 60 * 60 * 1000);
+        return saleDateCR.toISOString().slice(0, 10) <= activeDateTo;
+      });
+    }
+    if (activeAmountValue) {
+      const amount = Number(activeAmountValue);
+      result = result.filter((sale) => {
+        const total = Number(sale.total);
+        if (activeAmountOperator === ">=") return total >= amount;
+        if (activeAmountOperator === "<=") return total <= amount;
+        return total === amount;
+      });
     }
     return [...result].sort((a, b) => {
       let comparison = 0;
-      if (sortBy === "invoiceNumber") {
+      if (activeSortBy === "invoiceNumber") {
         comparison = a.invoiceNumber - b.invoiceNumber;
-      } else if (sortBy === "createdAt") {
+      } else if (activeSortBy === "createdAt") {
         comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      } else if (sortBy === "total") {
+      } else if (activeSortBy === "total") {
         comparison = Number(a.total) - Number(b.total);
       } else {
         const aClient = clientsById.get(a.clientId)?.name ?? "";
         const bClient = clientsById.get(b.clientId)?.name ?? "";
         comparison = aClient.localeCompare(bClient);
       }
-      return sortDir === "asc" ? comparison : -comparison;
+      return activeSortDir === "asc" ? comparison : -comparison;
     });
-  }, [sales, sortBy, sortDir, statusFilter, clientsById]);
+  }, [sales, activeSortBy, activeSortDir, activeStatusFilter, clientsById, activeDateFrom, activeDateTo, activeAmountOperator, activeAmountValue]);
 
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
 
@@ -999,6 +1032,7 @@ export default function Sales(): ReactElement {
                 }}
               >
                 <option value="PENDING">Pendiente</option>
+                <option value="PARTIAL">Parciales</option>
                 <option value="PAID">Pagada</option>
                 <option value="CANCELLED">Cancelada</option>
               </select>
@@ -1583,8 +1617,12 @@ export default function Sales(): ReactElement {
         <div className={styles.filters}>
           <div className={styles.field}>
             <label>Ordenar por</label>
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortBy)}>
-              <option value="invoiceNumber">Número</option>
+            <select value={sortBy} onChange={(e) => {
+              setSortBy(e.target.value as SortBy);
+              setDateFrom("");
+              setDateTo("");
+            }}>
+              <option value="invoiceNumber">Nro Factura</option>
               <option value="createdAt">Fecha</option>
               <option value="client">Cliente</option>
               <option value="total">Monto</option>
@@ -1602,12 +1640,87 @@ export default function Sales(): ReactElement {
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}>
               <option value="ALL">Todas</option>
               <option value="PENDING">Pendientes</option>
+              <option value="PARTIAL">Parciales</option>
               <option value="PAID">Pagadas</option>
               <option value="CANCELLED">Canceladas</option>
             </select>
           </div>
-        </div>
+          {sortBy === "createdAt" && (
+            <>
+              <div className={styles.field}>
+                <label>Desde</label>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  max={dateTo || undefined}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                />
+              </div>
+              <div className={styles.field}>
+                <label>Hasta</label>
+                <input
+                  type="date"
+                  value={dateTo}
+                  min={dateFrom || undefined}
+                  onChange={(e) => setDateTo(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+          {sortBy === "total" && (
+            <div className={styles.field}>
+              <label>Monto</label>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <select
+                  value={amountOperator}
+                  onChange={(e) => setAmountOperator(e.target.value as ">=" | "<=" | "=")}
+                  style={{ width: "135px" }}
+                >
+                  <option value=">=">Mayor o igual</option>
+                  <option value="<=">Menor o igual</option>
+                  <option value="=">Igual</option>
+                </select>
+                <input
+                  type="number"
+                  min="0"
+                  value={amountValue}
+                  onChange={(e) => setAmountValue(e.target.value)}
+                  placeholder="Monto"
+                  style={{ width: "100px" }}
+                />
+              </div>
+            </div>
+          )}
+          <button className={styles.primaryButton} type="button" onClick={() => {
+            setActiveSortBy(sortBy);
+            setActiveSortDir(sortDir);
+            setActiveStatusFilter(statusFilter);
+            setActiveDateFrom(dateFrom);
+            setActiveDateTo(dateTo);
+            setActiveAmountOperator(amountOperator);
+            setActiveAmountValue(amountValue);
+          }}>
+            Buscar
+          </button>
+          <button className={styles.button} type="button" onClick={() => {
+            setSortBy("createdAt");
+            setSortDir("desc");
+            setStatusFilter("ALL");
+            setDateFrom("");
+            setDateTo("");
+            setActiveSortBy("createdAt");
+            setActiveSortDir("desc");
+            setActiveStatusFilter("ALL");
+            setActiveDateFrom("");
+            setActiveDateTo("");
+            setActiveAmountOperator(">=");
+            setActiveAmountValue("");
 
+
+          }}>
+            Limpiar
+          </button>
+        </div>
         <div className={styles.tableContainer}>
           <table className={styles.table}>
             <thead>
@@ -1720,6 +1833,9 @@ function mapStatus(status: SaleStatus): string {
   }
   if (status === "CANCELLED") {
     return "Cancelada";
+  }
+  if (status === "PARTIAL") {
+    return "Parcial";
   }
   return "Pendiente";
 }

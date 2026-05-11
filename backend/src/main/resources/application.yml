@@ -6,7 +6,7 @@ spring:
     name: pos-backend
 
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/pos_db}
+    url: jdbc:postgresql://localhost:5432/pos_db?TimeZone=America/Costa_Rica
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:1234}
     driver-class-name: org.postgresql.Driver
@@ -21,9 +21,9 @@ spring:
     show-sql: false
 
   jackson:
-    time-zone: UTC
-    serialization:
-      write-dates-as-timestamps: false
+  time-zone: America/Costa_Rica
+  serialization:
+    write-dates-as-timestamps: false
 
 logging:
   level:
