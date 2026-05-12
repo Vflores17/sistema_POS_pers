@@ -16,19 +16,16 @@ export default function App(): ReactElement {
       <Route path="/login" element={<Login />} />
 
       <Route element={<PrivateRoute />}>
-        {/* Sin sidebar */}
+
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/sales" element={<Sales />} />
         <Route path="/sales/new" element={<Sales />} />
         <Route path="/sales/:id/edit" element={<Sales />} />
         <Route path="/sales/:id/view" element={<Sales />} />
+        <Route path="/clients" element={<Clients />} />
+        <Route path="/products" element={<Products />} />
+        <Route path="/users" element={<Users />} />
 
-        {/* Con sidebar */}
-        <Route element={<AppLayout />}>
-          <Route path="/clients" element={<Clients />} />
-          <Route path="/products" element={<Products />} />
-          <Route path="/users" element={<Users />} />
-        </Route>
       </Route>
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

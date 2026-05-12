@@ -18,6 +18,7 @@ import {
 import styles from "./Sales.module.css";
 import Modal from "../components/Modal";
 import { listProducts, createProduct, createProductPrice, getProductPrices, type Product } from "../api/products";
+import TicketPrint from "../components/TicketPrint";
 
 type SortBy = "invoiceNumber" | "createdAt" | "client" | "total";
 type StatusFilter = "ALL" | SaleStatus;
@@ -156,6 +157,7 @@ export default function Sales(): ReactElement {
   const [viewProductPrices, setViewProductPrices] = useState<{ type: string; price: number }[]>([]);
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
+  const [saleToPrint, setSaleToPrint] = useState<Sale | null>(null);
 
   function abrirCaja(): void {
     if (!montoInicialDraft) {
@@ -444,7 +446,13 @@ export default function Sales(): ReactElement {
       }
       if (e.altKey && e.key.toLowerCase() === "i") {
         e.preventDefault();
-        if (caja.abierta && selectedRowId) window.print();
+        if (caja.abierta && selectedRowId) {
+          const sale = sortedAndFilteredSales.find(s => s.id === selectedRowId);
+          if (sale) {
+            setSaleToPrint(sale);
+            setTimeout(() => window.print(), 300);
+          }
+        }
       }
       if (e.altKey && e.key.toLowerCase() === "e") {
         e.preventDefault();
@@ -977,7 +985,8 @@ export default function Sales(): ReactElement {
       }
 
       if (printAfterSave) {
-        window.print();
+        setSaleToPrint(saved);
+        setTimeout(() => window.print(), 300);
       }
       // Resetear formulario para nueva factura
       const next = await getNextInvoiceNumber();
@@ -1031,15 +1040,6 @@ export default function Sales(): ReactElement {
       },
       onCancel: closeModal,
     });
-  }
-
-  async function onMarkAsPaid(saleId: string): Promise<void> {
-    try {
-      const updated = await changeSaleStatus(saleId, "PAID");
-      setSales((prev) => prev.map((sale) => (sale.id === saleId ? updated : sale)));
-    } catch (err) {
-      setError(readError(err, "No se pudo marcar la venta como pagada."));
-    }
   }
 
   if (loading) {
@@ -1781,6 +1781,13 @@ export default function Sales(): ReactElement {
               danger={modal.danger}
             />
           )}
+          {saleToPrint && (
+            <TicketPrint
+              sale={saleToPrint}
+              client={clientsById.get(saleToPrint.clientId)}
+              productsById={productsById}
+            />
+          )}
         </section>
       </div>
     );
@@ -2049,7 +2056,13 @@ export default function Sales(): ReactElement {
 
             <button className={styles.button} type="button"
               disabled={!caja.abierta || !selectedRowId}
-              onClick={() => { if (selectedRowId) window.print(); }}>
+              onClick={() => {
+                const sale = sortedAndFilteredSales.find(s => s.id === selectedRowId);
+                if (sale) {
+                  setSaleToPrint(sale);
+                  setTimeout(() => window.print(), 300);
+                }
+              }}>
               <u>I</u>mprimir
             </button>
 
@@ -2146,6 +2159,13 @@ export default function Sales(): ReactElement {
               </div>
             </div>
           </div>
+        )}
+        {saleToPrint && (
+          <TicketPrint
+            sale={saleToPrint}
+            client={clientsById.get(saleToPrint.clientId)}
+            productsById={productsById}
+          />
         )}
       </section>
     </div>
