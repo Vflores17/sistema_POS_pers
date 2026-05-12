@@ -1,7 +1,6 @@
 
 import type { ReactElement } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import AppLayout from "./layouts/AppLayout";
 import Clients from "./pages/Clients";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
