@@ -175,7 +175,9 @@ public class SaleService {
                     "No price defined for product '" + product.getName() + "' and client type " + priceType
                 ));
 
-            BigDecimal price = productPrice.getPrice();
+            BigDecimal price = item.price() != null 
+                ? item.price()
+                : productPrice.getPrice();
             if (price == null) {
                 throw new ConflictException("Product price is null: " + product.getName());
             }

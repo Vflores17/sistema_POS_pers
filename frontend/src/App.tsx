@@ -21,6 +21,7 @@ export default function App(): ReactElement {
         <Route path="/sales" element={<Sales />} />
         <Route path="/sales/new" element={<Sales />} />
         <Route path="/sales/:id/edit" element={<Sales />} />
+        <Route path="/sales/:id/view" element={<Sales />} />
 
         {/* Con sidebar */}
         <Route element={<AppLayout />}>
@@ -32,6 +33,7 @@ export default function App(): ReactElement {
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
+
     </Routes>
   );
 }

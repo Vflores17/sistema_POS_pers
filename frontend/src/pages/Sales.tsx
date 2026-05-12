@@ -75,6 +75,8 @@ interface CajaState {
   montoInicial: number;
   horaInicio: string;
   facturaIds: string[];
+  pagos: { facturaId: string; method: string; amount: number }[];
+
 }
 
 const CAJA_STORAGE_KEY = "caja_state";
@@ -82,11 +84,15 @@ const CAJA_STORAGE_KEY = "caja_state";
 function loadCaja(): CajaState {
   try {
     const stored = localStorage.getItem(CAJA_STORAGE_KEY);
-    if (stored) return JSON.parse(stored) as CajaState;
+    if (stored) {
+      const parsed = JSON.parse(stored) as CajaState;
+      // 👈 asegurar que pagos siempre exista
+      return { ...parsed, pagos: parsed.pagos ?? [] };
+    }
   } catch {
     // si falla retorna cerrada
   }
-  return { abierta: false, montoInicial: 0, horaInicio: "", facturaIds: [] };
+  return { abierta: false, montoInicial: 0, horaInicio: "", facturaIds: [], pagos: [] };
 }
 
 function saveCaja(caja: CajaState): void {
@@ -104,7 +110,8 @@ export default function Sales(): ReactElement {
   const { id } = useParams<{ id: string }>();
   const isNewScreen = window.location.pathname === "/sales/new";
   const isEditScreen = window.location.pathname.endsWith("/edit");
-  const isFormScreen = isNewScreen || isEditScreen;
+  const isViewScreen = window.location.pathname.endsWith("/view");
+  const isFormScreen = isNewScreen || isEditScreen || isViewScreen;
 
   const selectedRowRef = useRef<HTMLTableRowElement | null>(null);
   const cellRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -167,6 +174,7 @@ export default function Sales(): ReactElement {
       montoInicial: Number(montoInicialDraft),
       horaInicio: new Date().toLocaleString('es-CR'),
       facturaIds: [],
+      pagos: []
     };
     setCaja(nuevaCaja);
     saveCaja(nuevaCaja);
@@ -177,25 +185,21 @@ export default function Sales(): ReactElement {
   function cerrarCaja(): void {
     const facturasDeTurno = sales.filter((sale) => caja.facturaIds.includes(sale.id));
 
-    const totalEfectivo = facturasDeTurno.reduce((sum, s) => {
-      const pagos = s.payments?.filter(p => p.method === "CASH") ?? [];
-      return sum + pagos.reduce((a, p) => a + Number(p.amount), 0);
-    }, 0);
+    const totalEfectivo = caja.pagos
+      .filter(p => p.method === "CASH")
+      .reduce((sum, p) => sum + p.amount, 0);
 
-    const totalSinpe = facturasDeTurno.reduce((sum, s) => {
-      const pagos = s.payments?.filter(p => p.method === "SINPE") ?? [];
-      return sum + pagos.reduce((a, p) => a + Number(p.amount), 0);
-    }, 0);
+    const totalSinpe = caja.pagos
+      .filter(p => p.method === "SINPE")
+      .reduce((sum, p) => sum + p.amount, 0);
 
-    const totalTransferencia = facturasDeTurno.reduce((sum, s) => {
-      const pagos = s.payments?.filter(p => p.method === "TRANSFER") ?? [];
-      return sum + pagos.reduce((a, p) => a + Number(p.amount), 0);
-    }, 0);
+    const totalTransferencia = caja.pagos
+      .filter(p => p.method === "TRANSFER")
+      .reduce((sum, p) => sum + p.amount, 0);
 
-    const totalTarjeta = facturasDeTurno.reduce((sum, s) => {
-      const pagos = s.payments?.filter(p => p.method === "CARD") ?? [];
-      return sum + pagos.reduce((a, p) => a + Number(p.amount), 0);
-    }, 0);
+    const totalTarjeta = caja.pagos
+      .filter(p => p.method === "CARD")
+      .reduce((sum, p) => sum + p.amount, 0);
     const horaInicio = caja.horaInicio;
     const mensaje = `
 🕐 Inicio: ${horaInicio}
@@ -226,6 +230,7 @@ export default function Sales(): ReactElement {
           montoInicial: 0,
           horaInicio: "",
           facturaIds: [],
+          pagos: []
         };
         setCaja(cajaCerrada);
         saveCaja(cajaCerrada);
@@ -233,8 +238,10 @@ export default function Sales(): ReactElement {
       onCancel: closeModal,
     });
   }
+
   useEffect(() => {
     if (!isFormScreen) return;
+
 
     function handleKeyDown(e: KeyboardEvent): void {
 
@@ -415,6 +422,58 @@ export default function Sales(): ReactElement {
   useEffect(() => {
     void bootstrap();
   }, [isFormScreen, isEditScreen, id]);
+
+  // 👈 aquí
+  useEffect(() => {
+    if (isFormScreen) return;
+
+    function handleKeyDown(e: KeyboardEvent): void {
+      if (modal.show) return;
+
+      if (e.altKey && e.key.toLowerCase() === "c") {
+        e.preventDefault();
+        if (caja.abierta) navigate("/sales/new");
+      }
+      if (e.altKey && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        if (caja.abierta && selectedRowId) navigate(`/sales/${selectedRowId}/edit`);
+      }
+      if (e.altKey && e.key.toLowerCase() === "v") {
+        e.preventDefault();
+        if (caja.abierta && selectedRowId) navigate(`/sales/${selectedRowId}/edit`);
+      }
+      if (e.altKey && e.key.toLowerCase() === "i") {
+        e.preventDefault();
+        if (caja.abierta && selectedRowId) window.print();
+      }
+      if (e.altKey && e.key.toLowerCase() === "e") {
+        e.preventDefault();
+        if (caja.abierta && selectedRowId) void onDeleteSale(selectedRowId);
+      }
+      if (e.altKey && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (caja.abierta && selectedRowId &&
+          (selectedSale?.status === "PENDING" || selectedSale?.status === "PARTIAL")) {
+          navigate(`/sales/${selectedRowId}/edit`);
+        }
+      }
+      if (e.altKey && e.key.toLowerCase() === "r") {
+        e.preventDefault();
+        navigate("/dashboard");
+      }
+      if (e.altKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        if (!caja.abierta) setShowAbrirCajaModal(true);
+      }
+      if (e.altKey && e.key.toLowerCase() === "x") {
+        e.preventDefault();
+        if (caja.abierta) cerrarCaja();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFormScreen, modal.show, selectedRowId, caja, navigate]);
 
 
 
@@ -624,7 +683,7 @@ export default function Sales(): ReactElement {
       setClients(baseData[0]);
       setProducts(baseData[1]);
       if (isFormScreen) {
-        if (isEditScreen && id) {
+        if ((isEditScreen || isViewScreen) && id) {
           const sale = await getSaleById(id);
           setInvoiceNumber(sale.invoiceNumber);
           setSaleTotal(Number(sale.total));
@@ -640,8 +699,9 @@ export default function Sales(): ReactElement {
             comments: "",
             status: sale.status,
           });
+          const clientName = baseData[0].find((c) => c.id === sale.clientId)?.name ?? "";
+          setClientSearch(clientName);
 
-          // 👈 cargar pagos existentes
           const nextPayments: PaymentDraftState = {
             CASH: { enabled: false, amount: "" },
             SINPE: { enabled: false, amount: "" },
@@ -678,10 +738,6 @@ export default function Sales(): ReactElement {
     }
   }
 
-  function onPaymentMethodChange(event: ChangeEvent<HTMLSelectElement>): void {
-    const paymentMethod = event.target.value as PaymentMethod;
-    setSaleDraft((prev) => ({ ...prev, paymentMethod }));
-  }
 
   function onCommentChange(event: ChangeEvent<HTMLTextAreaElement>): void {
     setSaleDraft((prev) => ({ ...prev, comments: event.target.value }));
@@ -830,7 +886,11 @@ export default function Sales(): ReactElement {
 
     const cleanedLines = saleDraft.lines
       .filter((line) => line.productId.trim().length > 0)
-      .map((line) => ({ productId: line.productId, quantity: line.quantity }));
+      .map((line) => ({
+        productId: line.productId,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+      }));
 
     if (cleanedLines.length === 0) {
       setModal({
@@ -881,16 +941,33 @@ export default function Sales(): ReactElement {
       const payload = {
         clientId: saleDraft.clientId,
         paymentMethod: saleDraft.paymentMethod,
-        items: cleanedLines,
+        items: cleanedLines.map((line) => ({
+          productId: line.productId,
+          quantity: line.quantity,
+          price: line.unitPrice !== "" ? Number(line.unitPrice) : undefined,
+        })),
       };
       const saved = isEditScreen && id
         ? await updateSale(id, payload)
         : await createSale(payload);
-      const realTotal = Number(saved.total); // 👈 total real del backend
-      if (!isEditScreen && caja.abierta) {
-        const updatedCaja = { ...caja, facturaIds: [...caja.facturaIds, saved.id] };
-        setCaja(updatedCaja);
-        saveCaja(updatedCaja);
+      if (caja.abierta) {
+        const yaExiste = caja.facturaIds.includes(saved.id);
+        const tienePagos = paymentsPayload.length > 0;
+        if (!isEditScreen || tienePagos) {
+          const nuevosPagos = paymentsPayload.map(p => ({
+            facturaId: saved.id,
+            method: p.method,
+            amount: p.amount,
+          }));
+          const updatedCaja = {
+            ...caja,
+            facturaIds: yaExiste ? caja.facturaIds : [...caja.facturaIds, saved.id],
+            // 👈 eliminar pagos anteriores de esta factura antes de agregar nuevos
+            pagos: [...caja.pagos.filter(p => p.facturaId !== saved.id), ...nuevosPagos],
+          };
+          setCaja(updatedCaja);
+          saveCaja(updatedCaja);
+        }
       }
       if (paymentsPayload.length > 0) {
         await savePayments(saved.id, paymentsPayload);
@@ -938,6 +1015,7 @@ export default function Sales(): ReactElement {
     setModal({
       show: true,
       type: "confirm",
+      danger: true,
       title: "Eliminar factura",
       message: "¿Estás seguro que deseas eliminar esta factura? Esta acción no se puede deshacer.",
       confirmLabel: "Eliminar",
@@ -964,16 +1042,6 @@ export default function Sales(): ReactElement {
     }
   }
 
-  function closeRegister(): void {
-    const today = new Date().toISOString().slice(0, 10);
-    const todaySales = sales.filter(
-      (sale) => sale.createdAt.slice(0, 10) === today && sale.status !== "CANCELLED"
-    );
-    const total = todaySales.reduce((sum, sale) => sum + Number(sale.total), 0);
-    window.alert(`Cierre del día\nVentas: ${todaySales.length}\nTotal: ${total.toFixed(2)}`);
-    window.print();
-  }
-
   if (loading) {
     return <section className={styles.page}>Cargando ventas...</section>;
   }
@@ -989,7 +1057,9 @@ export default function Sales(): ReactElement {
         padding: "1rem"
       }}>        <section className={styles.container}>
           <header className={styles.header}>
-            <h2 className={styles.title}>{isEditScreen ? "Modificar Venta" : "Nueva Venta"}</h2>
+            <h2 className={styles.title}>
+              {isEditScreen ? "Modificar Venta" : isViewScreen ? "Visualización de Factura" : "Nueva Venta"}
+            </h2>
           </header>
 
           {error ? <p className={styles.error}>{error}</p> : null}
@@ -1004,14 +1074,18 @@ export default function Sales(): ReactElement {
               <div style={{ position: "relative", zIndex: 50 }}>
                 <input
                   value={clientSearch}
+                  readOnly={isViewScreen}
                   onChange={(e) => {
+                    if (isViewScreen) return;
                     setClientSearch(e.target.value);
                     setSaleDraft((prev) => ({ ...prev, clientId: "" }));
                     setShowClientDropdown(true);
                     setClientDropdownIndex(-1);
                   }}
-                  onFocus={() => setShowClientDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
+                  onFocus={() => {
+                    if (isViewScreen) return; // 👈
+                    setShowClientDropdown(true);
+                  }} onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
                   onKeyDown={(e) => {
                     if (!showClientDropdown) return;
                     const options = filteredClientOptions.slice(0, 4);
@@ -1075,7 +1149,8 @@ export default function Sales(): ReactElement {
                       <input
                         type="checkbox"
                         checked={paymentDraft[item.key].enabled}
-                        onChange={(e) => onPaymentToggle(item.key, e.target.checked)}
+                        onChange={(event) => onPaymentToggle(item.key, event.target.checked)}
+                        disabled={isViewScreen} // 👈
                       />
                       {item.label}
                     </label>
@@ -1088,6 +1163,7 @@ export default function Sales(): ReactElement {
                         value={paymentDraft[item.key].amount}
                         onChange={(e) => onPaymentAmountChange(item.key, e.target.value)}
                         style={{ width: "100%", marginTop: "0.25rem" }}
+                        disabled={isViewScreen}
                       />
                     )}
                   </div>
@@ -1120,7 +1196,9 @@ export default function Sales(): ReactElement {
               <label>Estado</label>
               <select
                 value={saleDraft.status ?? "PENDING"}
+                disabled={isViewScreen}
                 onChange={async (e) => {
+
                   const newStatus = e.target.value as SaleStatus;
                   if (isEditScreen && id) {
                     // En edición → llama al backend de inmediato
@@ -1143,36 +1221,38 @@ export default function Sales(): ReactElement {
             </div>
           </div>
 
-            <div className={styles.menuBar}>
-              <button className={styles.primaryButton} type="button"
-                onClick={() => setShowCreateProductModal(true)}>
-                Crear producto <kbd>F2</kbd>
-              </button>
-              <button className={styles.button} type="button" onClick={() => setShowProductModal(true)}>
-                Listar productos <kbd>F3</kbd>
-              </button>
-              <button
-                className={styles.button}
-                type="button"
-                onClick={() => {
-                  const line = saleDraft.lines.find((item) => item.id === selectedRowId);
-                  const product = line ? productsById.get(line.productId) : undefined;
-                  if (product) {
-                    setViewProduct(product);
-                  } else {
-                    setError("Selecciona una fila con producto.");
-                  }
-                }}
-              >
-                Ver producto <kbd>F4</kbd>
-              </button>
-              <button className={styles.button} type="button" onClick={addEmptyRow}>
-                Agregar fila <kbd>F5</kbd>
-              </button>
-              <button className={styles.dangerButton} type="button" onClick={removeSelectedRow}>
-                Eliminar fila <kbd>F6</kbd>
-              </button>
-            </div>
+            {!isViewScreen && (
+              <div className={styles.menuBar}>
+                <button className={styles.primaryButton} type="button"
+                  onClick={() => setShowCreateProductModal(true)}>
+                  Crear producto <kbd>F2</kbd>
+                </button>
+                <button className={styles.button} type="button" onClick={() => setShowProductModal(true)}>
+                  Listar productos <kbd>F3</kbd>
+                </button>
+                <button
+                  className={styles.button}
+                  type="button"
+                  onClick={() => {
+                    const line = saleDraft.lines.find((item) => item.id === selectedRowId);
+                    const product = line ? productsById.get(line.productId) : undefined;
+                    if (product) {
+                      setViewProduct(product);
+                    } else {
+                      setError("Selecciona una fila con producto.");
+                    }
+                  }}
+                >
+                  Ver producto <kbd>F4</kbd>
+                </button>
+                <button className={styles.button} type="button" onClick={addEmptyRow}>
+                  Agregar fila <kbd>F5</kbd>
+                </button>
+                <button className={styles.dangerButton} type="button" onClick={removeSelectedRow}>
+                  Eliminar fila <kbd>F6</kbd>
+                </button>
+              </div>
+            )}
 
             <div className={styles.gridScrollArea}>
               <table className={styles.table}>
@@ -1200,6 +1280,7 @@ export default function Sales(): ReactElement {
                       >
                         <td>
                           <input
+                            readOnly={isViewScreen}
                             type="text"
                             placeholder="Buscar producto..."
                             value={
@@ -1208,11 +1289,13 @@ export default function Sales(): ReactElement {
                                 : (lineSearch[line.id] ?? "")
                             }
                             onChange={(e) => {
+                              if (isViewScreen) return;
                               setLineSearch((prev) => ({ ...prev, [line.id]: e.target.value }));
                               void onLineProductChange(line.id, "");
                               setLineDropdownIndex((prev) => ({ ...prev, [line.id]: -1 }));
                             }}
                             onFocus={(e) => {
+                              if (isViewScreen) return;
                               setActiveLineId(line.id);
                               setSelectedRowId(line.id);
                               setActiveCell({ rowId: line.id, col: "name" });
@@ -1253,7 +1336,7 @@ export default function Sales(): ReactElement {
                                 setActiveLineId("");
                                 setLineDropdownIndex((prev) => ({ ...prev, [line.id]: -1 }));
                               }
-                              // 👈 aquí
+
                               if (e.key === "ArrowRight" && (lineDropdownIndex[line.id] ?? -1) < 0) {
                                 e.preventDefault();
                                 focusCell(line.id, "quantity");
@@ -1302,6 +1385,7 @@ export default function Sales(): ReactElement {
                         </td>
                         <td>
                           <input
+                            readOnly={isViewScreen}
                             ref={(el) => { cellRefs.current[`${line.id}-quantity`] = el; }}
                             type="number"
                             min={1}
@@ -1337,8 +1421,9 @@ export default function Sales(): ReactElement {
                             }}
                           />
                         </td>
-                        <td>  {/* 👈 td separado para precio */}
+                        <td>
                           <input
+                            readOnly={isViewScreen}
                             ref={(el) => { cellRefs.current[`${line.id}-price`] = el; }}
                             type="number"
                             min="0"
@@ -1388,12 +1473,16 @@ export default function Sales(): ReactElement {
           <div className={styles.formBottomBar}>
             <p className={styles.totalBar}>Total: ₡{calculatedTotal.toLocaleString('es-CR')}</p>
             <div className={styles.bottomActions}>
-              <button className={styles.primaryButton} type="button" disabled={saving} onClick={() => void onSave(false)}>
-                Guard<u>a</u>r
-              </button>
-              <button className={styles.button} type="button" disabled={saving} onClick={() => void onSave(true)}>
-                Guardar e I<u>m</u>primir
-              </button>
+              {!isViewScreen && (
+                <>
+                  <button className={styles.primaryButton} type="button" disabled={saving} onClick={() => void onSave(false)}>
+                    Guard<u>a</u>r
+                  </button>
+                  <button className={styles.button} type="button" disabled={saving} onClick={() => void onSave(true)}>
+                    Guardar e I<u>m</u>primir
+                  </button>
+                </>
+              )}
               <button className={styles.button} type="button" onClick={() => navigate("/sales")}>
                 <u>S</u>alir
               </button>
@@ -1575,6 +1664,7 @@ export default function Sales(): ReactElement {
                         setProductModalIndex(-1);
                       }
                     }}
+                    readOnly={isViewScreen}
                   />
                 </div>
                 <div className={styles.tableWrap}>
@@ -1639,7 +1729,8 @@ export default function Sales(): ReactElement {
                   </div>
                   <div className={styles.field}>
                     <label>Estado</label>
-                    <input value={viewProduct.status === "ACTIVE" ? "Activo" : "Inactivo"} readOnly />
+                    <input value={viewProduct.status === "ACTIVE" ? "Activo" : "Inactivo"} readOnly disabled={isViewScreen} />
+
                   </div>
                   <div className={styles.field}>
                     <label>Stock</label>
@@ -1802,6 +1893,7 @@ export default function Sales(): ReactElement {
             <div className={styles.field} style={{ position: "relative" }}>
               <label>Cliente</label>
               <input
+                readOnly={isViewScreen}
                 type="text"
                 placeholder="Buscar cliente..."
                 value={clientFilterSearch}
@@ -1888,7 +1980,7 @@ export default function Sales(): ReactElement {
             setActiveDateTo("");
             setActiveAmountOperator(">=");
             setActiveAmountValue("");
-            setClientSearch2("");
+            setClientSearch("");
             setClientFilterSearch("");
             setActiveClientId("");
 
@@ -1940,57 +2032,56 @@ export default function Sales(): ReactElement {
             <button className={styles.primaryButton} type="button"
               disabled={!caja.abierta}
               onClick={() => navigate("/sales/new")}>
-              Crear
+              <u>C</u>rear
             </button>
+
             <button className={styles.button} type="button"
               disabled={!caja.abierta || !selectedRowId}
               onClick={() => selectedRowId && navigate(`/sales/${selectedRowId}/edit`)}>
-              Modificar
+              M<u>o</u>dificar
             </button>
+
             <button className={styles.button} type="button"
               disabled={!caja.abierta || !selectedRowId}
-              onClick={() => selectedRowId && navigate(`/sales/${selectedRowId}/edit`)}>
-              Ver Factura
+              onClick={() => selectedRowId && navigate(`/sales/${selectedRowId}/view`)}>
+              <u>V</u>er Factura
             </button>
+
             <button className={styles.button} type="button"
               disabled={!caja.abierta || !selectedRowId}
               onClick={() => { if (selectedRowId) window.print(); }}>
-              Imprimir
+              <u>I</u>mprimir
             </button>
+
             <button className={styles.dangerButton} type="button"
               disabled={!caja.abierta || !selectedRowId}
               onClick={() => selectedRowId && void onDeleteSale(selectedRowId)}>
-              Eliminar
+              <u>E</u>liminar
             </button>
+
             <button className={styles.primaryButton} type="button"
-              disabled={!caja.abierta || !selectedRowId || selectedSale?.status !== "PENDING"}
-              onClick={() => selectedRowId && void onMarkAsPaid(selectedRowId)}>
-              Pagar
+              disabled={!caja.abierta || !selectedRowId ||
+                (selectedSale?.status !== "PENDING" && selectedSale?.status !== "PARTIAL")}
+              onClick={() => selectedRowId && navigate(`/sales/${selectedRowId}/edit`)}>
+              Pagar <kbd>Alt+Z</kbd>
             </button>
           </div>
           <div className={styles.bottomGlobal}>
-            <button
-              className={styles.primaryButton}
-              type="button"
+            <button className={styles.primaryButton} type="button"
               disabled={caja.abierta}
-              onClick={() => setShowAbrirCajaModal(true)}
-            >
-              Iniciar Caja
+              onClick={() => setShowAbrirCajaModal(true)}>
+              Iniciar Caja <kbd>Alt+K</kbd>
             </button>
-            <button
-              className={styles.button}
-              type="button"
+
+            <button className={styles.button} type="button"
               disabled={!caja.abierta}
-              onClick={cerrarCaja}
-            >
-              Cierre de Caja
+              onClick={cerrarCaja}>
+              Cierre de Caja <kbd>Alt+X</kbd>
             </button>
-            <button
-              className={styles.button}
-              type="button"
-              onClick={() => navigate("/dashboard")}
-            >
-              Salir
+
+            <button className={styles.button} type="button"
+              onClick={() => navigate("/dashboard")}>
+              Sali<u>r</u>
             </button>
           </div>
         </div>
