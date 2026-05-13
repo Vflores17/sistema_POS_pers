@@ -506,7 +506,7 @@ kbd {
 
 .gridScrollArea {
   flex: 1;
-  max-height: 422px;
+  max-height: 305px;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   background: white;

@@ -19,6 +19,7 @@ import styles from "./Sales.module.css";
 import Modal from "../components/Modal";
 import { listProducts, createProduct, createProductPrice, getProductPrices, type Product } from "../api/products";
 import TicketPrint from "../components/TicketPrint";
+import CierreCajaPrint from "../components/CierreCajaPrint";
 
 type SortBy = "invoiceNumber" | "createdAt" | "client" | "total";
 type StatusFilter = "ALL" | SaleStatus;
@@ -159,6 +160,18 @@ export default function Sales(): ReactElement {
   const [dateTo, setDateTo] = useState<string>("");
   const [saleToPrint, setSaleToPrint] = useState<Sale | null>(null);
 
+  const [cierreToPrint, setCierreToPrint] = useState<{
+    horaInicio: string;
+    horaCierre: string;
+    montoInicial: number;
+    cantidadFacturas: number;
+    totalEfectivo: number;
+    totalSinpe: number;
+    totalTransferencia: number;
+    totalTarjeta: number;
+    total: number;
+  } | null>(null);
+
   function abrirCaja(): void {
     if (!montoInicialDraft) {
       setModal({
@@ -226,16 +239,32 @@ export default function Sales(): ReactElement {
       cancelLabel: "Cancelar",
       onConfirm: () => {
         closeModal();
-        window.print();
-        const cajaCerrada: CajaState = {
-          abierta: false,
-          montoInicial: 0,
-          horaInicio: "",
-          facturaIds: [],
-          pagos: []
-        };
-        setCaja(cajaCerrada);
-        saveCaja(cajaCerrada);
+
+        // 👈 guardar datos para imprimir
+        setCierreToPrint({
+          horaInicio: caja.horaInicio,
+          horaCierre: new Date().toLocaleString('es-CR'),
+          montoInicial: caja.montoInicial,
+          cantidadFacturas: facturasDeTurno.length,
+          totalEfectivo,
+          totalSinpe,
+          totalTransferencia,
+          totalTarjeta,
+          total: totalEfectivo + totalSinpe + totalTransferencia + totalTarjeta,
+        });
+
+        setTimeout(() => {
+          window.print();
+          const cajaCerrada: CajaState = {
+            abierta: false,
+            montoInicial: 0,
+            horaInicio: "",
+            facturaIds: [],
+            pagos: []
+          };
+          setCaja(cajaCerrada);
+          saveCaja(cajaCerrada);
+        }, 300);
       },
       onCancel: closeModal,
     });
@@ -2166,6 +2195,9 @@ export default function Sales(): ReactElement {
             client={clientsById.get(saleToPrint.clientId)}
             productsById={productsById}
           />
+        )}
+        {cierreToPrint && (
+          <CierreCajaPrint data={cierreToPrint} />
         )}
       </section>
     </div>

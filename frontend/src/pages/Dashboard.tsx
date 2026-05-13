@@ -21,6 +21,10 @@ export default function Dashboard(): ReactElement {
           <span className={styles.menuIcon}>🧾</span>
           Ventas
         </a>
+        <a href="/route-sales" className={styles.menuItem}>
+          <span className={styles.menuIcon}>🚚</span>
+          Rutas
+        </a>
         <a href="/products" className={styles.menuItem}>
           <span className={styles.menuIcon}>📦</span>
           Productos
