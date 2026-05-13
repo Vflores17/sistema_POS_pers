@@ -37,10 +37,6 @@ export default function Dashboard(): ReactElement {
           <span className={styles.menuIcon}>👤</span>
           Usuarios
         </a>
-        <a href="/reports" className={styles.menuItem}>
-          <span className={styles.menuIcon}>📊</span>
-          Reportes
-        </a>
         <a href="#"
           className={styles.menuItem}
           onClick={() => {

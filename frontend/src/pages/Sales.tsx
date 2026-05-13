@@ -169,7 +169,7 @@ export default function Sales(): ReactElement {
 
   const [showGastosModal, setShowGastosModal] = useState<boolean>(false);
   const [gastoDraft, setGastoDraft] = useState<{ descripcion: string; monto: string }>({ descripcion: "", monto: "" });
-  const [facturaToPDF, setFacturaToPDF] = useState<Sale | null>(null);
+  const [facturaToPDF] = useState<Sale | null>(null);
   const [whatsappModal, setWhatsappModal] = useState<{
     show: boolean;
     sale: Sale | null;
@@ -824,7 +824,6 @@ export default function Sales(): ReactElement {
   }
 
   async function onLineProductChange(lineId: string, productId: string): Promise<void> {
-    console.log("onLineProductChange called", { productId, clientId: saleDraft.clientId });
     if (!productId) {
       setSaleDraft((prev) => ({
         ...prev,
@@ -839,7 +838,6 @@ export default function Sales(): ReactElement {
     if (saleDraft.clientId) {
       try {
         unitPrice = await resolveUnitPrice(productId, saleDraft.clientId);
-        console.log("s resolvio el precio");
       } catch {
       }
     }
@@ -1067,7 +1065,6 @@ export default function Sales(): ReactElement {
       setClientSearch("");
       setSelectedRowId("");
       setLineSearch({});
-      setPaymentDraft(EMPTY_PAYMENTS);
       setPaymentDraft(EMPTY_PAYMENTS);
 
 
@@ -1442,7 +1439,6 @@ export default function Sales(): ReactElement {
                                       : {}}
                                     onMouseEnter={() => setLineDropdownIndex((prev) => ({ ...prev, [line.id]: index }))}
                                     onMouseDown={() => {
-                                      console.log("mousedown fired", p.id);
                                       void onLineProductChange(line.id, p.id);
                                       setLineSearch((prev) => ({ ...prev, [line.id]: "" }));
                                       setActiveLineId("");

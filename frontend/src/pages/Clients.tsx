@@ -12,7 +12,7 @@ import {
 } from "../api/clients";
 import styles from "./Clients.module.css";
 import { useNavigate } from "react-router-dom"; // 👈
-import { isAdmin, getCurrentUserRoles } from "../api/auth-utils";
+import { isAdmin } from "../api/auth-utils";
 
 interface ClientFormState {
   name: string;
@@ -29,8 +29,6 @@ const INITIAL_FORM: ClientFormState = {
 };
 
 export default function Clients(): ReactElement {
-  console.log("roles:", getCurrentUserRoles()); // 👈
-  console.log("isAdmin:", isAdmin());           // 👈
   const [clients, setClients] = useState<Client[]>([]);
   const [form, setForm] = useState<ClientFormState>(INITIAL_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
