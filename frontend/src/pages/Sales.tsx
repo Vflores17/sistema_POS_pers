@@ -21,6 +21,8 @@ import { listProducts, createProduct, createProductPrice, getProductPrices, type
 import TicketPrint from "../components/TicketPrint";
 import CierreCajaPrint from "../components/CierreCajaPrint";
 import * as XLSX from 'xlsx';
+import FacturaPDF from "../components/FacturaPDF";
+
 
 type SortBy = "invoiceNumber" | "createdAt" | "client" | "total";
 type StatusFilter = "ALL" | SaleStatus;
@@ -167,6 +169,13 @@ export default function Sales(): ReactElement {
 
   const [showGastosModal, setShowGastosModal] = useState<boolean>(false);
   const [gastoDraft, setGastoDraft] = useState<{ descripcion: string; monto: string }>({ descripcion: "", monto: "" });
+  const [facturaToPDF, setFacturaToPDF] = useState<Sale | null>(null);
+  const [whatsappModal, setWhatsappModal] = useState<{
+    show: boolean;
+    sale: Sale | null;
+    mensaje: string;
+    telefono: string;
+  } | null>(null);
 
   const [cierreToPrint, setCierreToPrint] = useState<{
     horaInicio: string;
@@ -293,6 +302,16 @@ export default function Sales(): ReactElement {
       onCancel: closeModal,
     });
   }
+
+  useEffect(() => {
+    if (!whatsappModal?.show) return;
+    function handleKeyDown(e: KeyboardEvent): void {
+      if (e.key === "Enter") confirmarEnvioWhatsApp();
+      if (e.key === "Escape") setWhatsappModal(null);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [whatsappModal]);
 
   useEffect(() => {
     if (!isFormScreen) return;
@@ -2118,6 +2137,14 @@ export default function Sales(): ReactElement {
               }}>
               <u>I</u>mprimir
             </button>
+            <button className={styles.button} type="button"
+              disabled={!caja.abierta || !selectedRowId}
+              onClick={() => {
+                const sale = sortedAndFilteredSales.find(s => s.id === selectedRowId);
+                if (sale) enviarWhatsApp(sale);
+              }}>
+              WhatsApp
+            </button>
 
             <button className={styles.dangerButton} type="button"
               disabled={!caja.abierta || !selectedRowId}
@@ -2304,6 +2331,54 @@ export default function Sales(): ReactElement {
             </div>
           </div>
         )}
+        {facturaToPDF && (
+          <FacturaPDF
+            sale={facturaToPDF}
+            client={clientsById.get(facturaToPDF.clientId)}
+            productsById={productsById}
+          />
+        )}
+        {whatsappModal?.show && (
+          <div className={styles.modalBackdrop}>
+            <div className={styles.modal}>
+              <header className={styles.modalHeader}>
+                <h3>Enviar por WhatsApp</h3>
+                <button className={styles.button} type="button" onClick={() => setWhatsappModal(null)}>
+                  Cerrar <kbd>Esc</kbd>
+                </button>
+              </header>
+
+              <div className={styles.field}>
+                <label>Número de teléfono</label>
+                <input
+                  type="text"
+                  value={whatsappModal.telefono}
+                  onChange={(e) => setWhatsappModal(prev => prev ? { ...prev, telefono: e.target.value } : null)}
+                  placeholder="Ej: 88888888"
+                />
+              </div>
+
+              <div className={styles.field} style={{ marginTop: "0.75rem" }}>
+                <label>Mensaje</label>
+                <textarea
+                  rows={4}
+                  value={whatsappModal.mensaje}
+                  onChange={(e) => setWhatsappModal(prev => prev ? { ...prev, mensaje: e.target.value } : null)}
+                  style={{ resize: "none", border: "1px solid #d1d5db", borderRadius: 8, padding: "0.5rem", font: "inherit" }}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
+                <button className={styles.primaryButton} type="button" onClick={confirmarEnvioWhatsApp}>
+                  Enviar <kbd>Enter</kbd>
+                </button>
+                <button className={styles.button} type="button" onClick={() => setWhatsappModal(null)}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );
@@ -2421,6 +2496,124 @@ export default function Sales(): ReactElement {
     };
     setCaja(updatedCaja);
     saveCaja(updatedCaja);
+  }
+
+  function enviarWhatsApp(sale: Sale): void {
+    const client = clientsById.get(sale.clientId);
+    const phone = client?.phone ?? "";
+    const mensajePredeterminado = `Hola buenas tardes.!! Adjuntamos la factura que se te entregará el dia de mañana. =)`;
+
+    setWhatsappModal({
+      show: true,
+      sale,
+      mensaje: mensajePredeterminado,
+      telefono: phone,
+    });
+  }
+
+  function confirmarEnvioWhatsApp(): void {
+    if (!whatsappModal?.sale) return;
+    const sale = whatsappModal.sale;
+    const client = clientsById.get(sale.clientId);
+
+    if (!whatsappModal.telefono.trim()) {
+      setModal({
+        show: true,
+        type: "error",
+        title: "Error",
+        message: "El número de teléfono es obligatorio.",
+        confirmLabel: "Aceptar",
+        onConfirm: closeModal,
+      });
+      return;
+    }
+
+    setWhatsappModal(null);
+
+    const fecha = new Date(sale.createdAt).toLocaleDateString('es-CR');
+    const hora = new Date(sale.createdAt).toLocaleTimeString('es-CR');
+    const totalCantidad = sale.details.reduce((sum, d) => sum + d.quantity, 0);
+
+    const detalles = sale.details.map(detail => `
+    <tr>
+      <td style="text-align:center;padding:2mm 0">${detail.quantity}</td>
+      <td style="padding:2mm 5mm">${productsById.get(detail.productId)?.name ?? detail.productName}</td>
+      <td style="text-align:right;padding:2mm 0">₡${Number(detail.subtotal).toLocaleString('es-CR')}</td>
+    </tr>
+  `).join("");
+
+    const pagos = (sale.payments ?? []).map(payment => `
+    <tr>
+      <td>${payment.method === "CASH" ? "Efectivo" : payment.method === "SINPE" ? "SINPE" : payment.method === "TRANSFER" ? "Transferencia" : "Tarjeta"}</td>
+      <td style="text-align:right">₡${Number(payment.amount).toLocaleString('es-CR')}</td>
+    </tr>
+  `).join("");
+
+    const html = `
+    <div style="font-family:Arial,sans-serif;font-size:14px;color:black;padding:20mm;width:216mm;box-sizing:border-box">
+      <p style="text-align:center;font-weight:bold;font-size:18px;margin-bottom:8mm">Gracias por su preferencia!</p>
+      
+      <div style="display:flex;justify-content:space-between;margin-bottom:4mm">
+        <span style="font-weight:bold;font-size:20px">${sale.invoiceNumber}</span>
+        <span style="text-align:right;font-size:13px">${fecha}<br/>${hora}</span>
+      </div>
+
+      <p style="margin:2mm 0 0 0;font-size:13px">Cliente:</p>
+      <p style="margin:0 0 4mm 0;font-size:16px;font-weight:bold">${client?.name ?? "—"}</p>
+
+      <hr style="border:none;border-top:1px dashed black;margin:3mm 0"/>
+
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="border-bottom:1px dashed black">
+            <th style="text-align:center;font-size:13px;padding-bottom:2mm;width:20mm">CANT.</th>
+            <th style="text-align:left;font-size:13px;padding-bottom:2mm;padding-left:5mm">DESCRIPCION</th>
+            <th style="text-align:right;font-size:13px;padding-bottom:2mm;width:35mm">TOTAL ₡</th>
+          </tr>
+        </thead>
+        <tbody>${detalles}</tbody>
+      </table>
+
+      <hr style="border:none;border-top:1px dashed black;margin:3mm 0"/>
+      <p style="font-weight:bold;margin:1mm 0">${totalCantidad}</p>
+      <hr style="border:none;border-top:1px dashed black;margin:3mm 0"/>
+
+      <table style="width:100%;border-collapse:collapse;margin:1mm 0">
+        <tbody>${pagos}</tbody>
+      </table>
+
+      <hr style="border:none;border-top:1px dashed black;margin:3mm 0"/>
+
+      <table style="width:100%;border-collapse:collapse;margin:1mm 0">
+        <tbody>
+          <tr>
+            <td style="font-size:16px"><strong>T O T A L</strong></td>
+            <td style="text-align:right;font-size:16px"><strong>₡${Number(sale.total).toLocaleString('es-CR')}</strong></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <hr style="border:none;border-top:1px dashed black;margin:3mm 0"/>
+      <p style="text-align:center;font-weight:bold;font-size:16px;margin-top:5mm">Estado: ${sale.status === "PAID" ? "PAGADA" : sale.status === "PARTIAL" ? "PARCIAL" : sale.status === "PENDING" ? "PENDIENTE" : "CANCELADA"}</p>
+    </div>
+  `;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const html2pdf = (window as any).html2pdf;
+    html2pdf()
+      .set({
+        margin: 0,
+        filename: `${client?.name ?? "cliente"}_${sale.invoiceNumber}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' }
+      })
+      .from(html)
+      .save()
+      .then(() => {
+        const phoneFormatted = whatsappModal.telefono.replace(/\D/g, "");
+        window.open(`https://wa.me/506${phoneFormatted}?text=${encodeURIComponent(whatsappModal.mensaje)}`, "_blank");
+      });
   }
 
 }
