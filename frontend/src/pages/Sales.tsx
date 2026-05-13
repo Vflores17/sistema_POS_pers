@@ -20,6 +20,7 @@ import Modal from "../components/Modal";
 import { listProducts, createProduct, createProductPrice, getProductPrices, type Product } from "../api/products";
 import TicketPrint from "../components/TicketPrint";
 import CierreCajaPrint from "../components/CierreCajaPrint";
+import * as XLSX from 'xlsx';
 
 type SortBy = "invoiceNumber" | "createdAt" | "client" | "total";
 type StatusFilter = "ALL" | SaleStatus;
@@ -78,6 +79,7 @@ interface CajaState {
   horaInicio: string;
   facturaIds: string[];
   pagos: { facturaId: string; method: string; amount: number }[];
+  gastos: { id: string; descripcion: string; monto: number }[]; // 👈
 
 }
 
@@ -88,13 +90,16 @@ function loadCaja(): CajaState {
     const stored = localStorage.getItem(CAJA_STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored) as CajaState;
-      // 👈 asegurar que pagos siempre exista
-      return { ...parsed, pagos: parsed.pagos ?? [] };
+      return {
+        ...parsed,
+        pagos: parsed.pagos ?? [],
+        gastos: parsed.gastos ?? [] // 👈
+      };
     }
   } catch {
     // si falla retorna cerrada
   }
-  return { abierta: false, montoInicial: 0, horaInicio: "", facturaIds: [], pagos: [] };
+  return { abierta: false, montoInicial: 0, horaInicio: "", facturaIds: [], pagos: [], gastos: [] };
 }
 
 function saveCaja(caja: CajaState): void {
@@ -160,6 +165,9 @@ export default function Sales(): ReactElement {
   const [dateTo, setDateTo] = useState<string>("");
   const [saleToPrint, setSaleToPrint] = useState<Sale | null>(null);
 
+  const [showGastosModal, setShowGastosModal] = useState<boolean>(false);
+  const [gastoDraft, setGastoDraft] = useState<{ descripcion: string; monto: string }>({ descripcion: "", monto: "" });
+
   const [cierreToPrint, setCierreToPrint] = useState<{
     horaInicio: string;
     horaCierre: string;
@@ -169,7 +177,10 @@ export default function Sales(): ReactElement {
     totalSinpe: number;
     totalTransferencia: number;
     totalTarjeta: number;
+    totalGastos: number;
+    efectivoNeto: number;
     total: number;
+    gastos: { descripcion: string; monto: number }[]; // 👈
   } | null>(null);
 
   function abrirCaja(): void {
@@ -189,7 +200,8 @@ export default function Sales(): ReactElement {
       montoInicial: Number(montoInicialDraft),
       horaInicio: new Date().toLocaleString('es-CR'),
       facturaIds: [],
-      pagos: []
+      pagos: [],
+      gastos: [], // 👈
     };
     setCaja(nuevaCaja);
     saveCaja(nuevaCaja);
@@ -216,6 +228,9 @@ export default function Sales(): ReactElement {
       .filter(p => p.method === "CARD")
       .reduce((sum, p) => sum + p.amount, 0);
     const horaInicio = caja.horaInicio;
+    const totalGastos = caja.gastos.reduce((sum, g) => sum + g.monto, 0);
+    const efectivoNeto = totalEfectivo - totalGastos;
+
     const mensaje = `
 🕐 Inicio: ${horaInicio}
 💵 Monto inicial: ₡${caja.montoInicial.toLocaleString('es-CR')}
@@ -227,8 +242,11 @@ export default function Sales(): ReactElement {
 🏦 Transferencia: ₡${totalTransferencia.toLocaleString('es-CR')}
 💳 Tarjeta: ₡${totalTarjeta.toLocaleString('es-CR')}
 
+🧾 Gastos: ₡${totalGastos.toLocaleString('es-CR')}
+💵 Efectivo neto: ₡${efectivoNeto.toLocaleString('es-CR')}
+
 ⚠️ Recuerde vaciar la memoria del datáfono.
-  `.trim();
+`.trim();
 
     setModal({
       show: true,
@@ -239,6 +257,8 @@ export default function Sales(): ReactElement {
       cancelLabel: "Cancelar",
       onConfirm: () => {
         closeModal();
+        generarExcelCierre(); // 👈 descargar Excel
+
 
         // 👈 guardar datos para imprimir
         setCierreToPrint({
@@ -250,7 +270,10 @@ export default function Sales(): ReactElement {
           totalSinpe,
           totalTransferencia,
           totalTarjeta,
+          totalGastos,        // 👈
+          efectivoNeto,       // 👈
           total: totalEfectivo + totalSinpe + totalTransferencia + totalTarjeta,
+          gastos: caja.gastos, // 👈
         });
 
         setTimeout(() => {
@@ -260,7 +283,8 @@ export default function Sales(): ReactElement {
             montoInicial: 0,
             horaInicio: "",
             facturaIds: [],
-            pagos: []
+            pagos: [],
+            gastos: []
           };
           setCaja(cajaCerrada);
           saveCaja(cajaCerrada);
@@ -2108,6 +2132,14 @@ export default function Sales(): ReactElement {
               Pagar <kbd>Alt+Z</kbd>
             </button>
           </div>
+          <button
+            className={styles.button}
+            type="button"
+            disabled={!caja.abierta}
+            onClick={() => setShowGastosModal(true)}
+          >
+            Gastos
+          </button>
           <div className={styles.bottomGlobal}>
             <button className={styles.primaryButton} type="button"
               disabled={caja.abierta}
@@ -2199,9 +2231,198 @@ export default function Sales(): ReactElement {
         {cierreToPrint && (
           <CierreCajaPrint data={cierreToPrint} />
         )}
+        {showGastosModal && (
+          <div className={styles.modalBackdrop}>
+            <div className={styles.modal}>
+              <header className={styles.modalHeader}>
+                <h3>Gastos del turno</h3>
+                <button className={styles.button} type="button" onClick={() => setShowGastosModal(false)}>
+                  Cerrar
+                </button>
+              </header>
+
+              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
+                <div className={styles.field} style={{ flex: 2 }}>
+                  <label>Descripción</label>
+                  <input
+                    type="text"
+                    value={gastoDraft.descripcion}
+                    onChange={(e) => setGastoDraft(prev => ({ ...prev, descripcion: e.target.value }))}
+                    placeholder="Ej: Gasolina, almuerzo..."
+                    onKeyDown={(e) => { if (e.key === "Enter") agregarGasto(); }}
+                  />
+                </div>
+                <div className={styles.field} style={{ flex: 1 }}>
+                  <label>Monto</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={gastoDraft.monto}
+                    onChange={(e) => setGastoDraft(prev => ({ ...prev, monto: e.target.value }))}
+                    onKeyDown={(e) => { if (e.key === "Enter") agregarGasto(); }}
+                  />
+                </div>
+                <div style={{ display: "flex", alignItems: "flex-end" }}>
+                  <button className={styles.primaryButton} type="button" onClick={agregarGasto}>
+                    Agregar
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ maxHeight: "300px", overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 8 }}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Descripción</th>
+                      <th>Monto</th>
+                      <th>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {caja.gastos.length === 0 ? (
+                      <tr><td colSpan={3} className={styles.empty}>No hay gastos registrados.</td></tr>
+                    ) : (
+                      caja.gastos.map((gasto) => (
+                        <tr key={gasto.id}>
+                          <td>{gasto.descripcion}</td>
+                          <td>₡{gasto.monto.toLocaleString('es-CR')}</td>
+                          <td>
+                            <button className={styles.dangerButton} type="button" onClick={() => eliminarGasto(gasto.id)}>
+                              Eliminar
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <p style={{ marginTop: "0.5rem", fontWeight: 600 }}>
+                Total gastos: ₡{caja.gastos.reduce((sum, g) => sum + g.monto, 0).toLocaleString('es-CR')}
+              </p>
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );
+
+  function generarExcelCierre(): void {
+    const facturasDeTurno = sales.filter((sale) => caja.facturaIds.includes(sale.id));
+
+    const filas: Record<string, string | number>[] = facturasDeTurno.map((sale) => {
+      const clientName = clientsById.get(sale.clientId)?.name ?? sale.clientId;
+      const efectivo = caja.pagos
+        .filter(p => p.facturaId === sale.id && p.method === "CASH")
+        .reduce((sum, p) => sum + p.amount, 0);
+      const sinpeTransfer = caja.pagos
+        .filter(p => p.facturaId === sale.id && (p.method === "SINPE" || p.method === "TRANSFER"))
+        .reduce((sum, p) => sum + p.amount, 0);
+      const tarjeta = caja.pagos
+        .filter(p => p.facturaId === sale.id && p.method === "CARD")
+        .reduce((sum, p) => sum + p.amount, 0);
+
+      return {
+        "Cliente": clientName,
+        "Efectivo": efectivo || "",
+        "": "",
+        "SINPE/Transferencia": sinpeTransfer || "",
+        "Tarjeta": tarjeta || "",
+      };
+    });
+
+    // Fila vacía
+    filas.push({ "Cliente": "", "Efectivo": "", "": "", "SINPE/Transferencia": "", "Tarjeta": "" });
+
+    // Total efectivo
+    const totalEfectivo = caja.pagos
+      .filter(p => p.method === "CASH")
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    filas.push({
+      "Cliente": "TOTAL EFECTIVO",
+      "Efectivo": totalEfectivo,
+      "": "",
+      "SINPE/Transferencia": "",
+      "Tarjeta": "",
+    });
+
+    // Fila vacía
+    filas.push({ "Cliente": "", "Efectivo": "", "": "", "SINPE/Transferencia": "", "Tarjeta": "" });
+
+    // Gastos
+    caja.gastos.forEach((gasto) => {
+      filas.push({
+        "Cliente": gasto.descripcion,
+        "Efectivo": -gasto.monto,
+        "": "",
+        "SINPE/Transferencia": "",
+        "Tarjeta": "",
+      });
+    });
+
+    // Fila vacía
+    filas.push({ "Cliente": "", "Efectivo": "", "": "", "SINPE/Transferencia": "", "Tarjeta": "" });
+
+    // Efectivo neto
+    const totalGastos = caja.gastos.reduce((sum, g) => sum + g.monto, 0);
+    const efectivoNeto = totalEfectivo - totalGastos;
+    filas.push({
+      "Cliente": "EFECTIVO NETO",
+      "Efectivo": efectivoNeto,
+      "": "",
+      "SINPE/Transferencia": "",
+      "Tarjeta": "",
+    });
+
+    const ws = XLSX.utils.json_to_sheet(filas);
+
+    // Fórmula de suma para TOTAL EFECTIVO
+    const dataRows = facturasDeTurno.length;
+    const totalRow = dataRows + 2; // +1 header +1 fila vacía
+    ws[`B${totalRow}`] = {
+      t: 'n',
+      f: `SUM(B2:B${dataRows + 1})`
+    };
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Cierre de Caja");
+    XLSX.writeFile(wb, `cierre_caja_${new Date().toLocaleDateString('es-CR').replace(/\//g, '-')}.xlsx`);
+  }
+
+  function agregarGasto(): void {
+    if (!gastoDraft.descripcion.trim()) {
+      setError("La descripción del gasto es obligatoria.");
+      return;
+    }
+    if (!gastoDraft.monto || Number(gastoDraft.monto) <= 0) {
+      setError("El monto del gasto debe ser mayor a 0.");
+      return;
+    }
+    const nuevoGasto = {
+      id: crypto.randomUUID(),
+      descripcion: gastoDraft.descripcion.trim(),
+      monto: Number(gastoDraft.monto),
+    };
+    const updatedCaja = {
+      ...caja,
+      gastos: [...caja.gastos, nuevoGasto],
+    };
+    setCaja(updatedCaja);
+    saveCaja(updatedCaja);
+    setGastoDraft({ descripcion: "", monto: "" });
+  }
+
+  function eliminarGasto(id: string): void {
+    const updatedCaja = {
+      ...caja,
+      gastos: caja.gastos.filter(g => g.id !== id),
+    };
+    setCaja(updatedCaja);
+    saveCaja(updatedCaja);
+  }
+
 }
 
 function mapPaymentMethod(paymentMethod: PaymentMethod): string {
