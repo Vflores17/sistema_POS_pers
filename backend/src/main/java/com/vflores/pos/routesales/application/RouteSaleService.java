@@ -4,6 +4,7 @@ import com.vflores.pos.auth.infrastructure.security.AuthenticatedUser;
 import com.vflores.pos.clients.domain.model.Client;
 import com.vflores.pos.clients.domain.model.ClientType;
 import com.vflores.pos.clients.domain.repository.ClientRepository;
+import com.vflores.pos.drivers.domain.repository.DriverRepository;
 import com.vflores.pos.products.domain.model.Product;
 import com.vflores.pos.products.domain.model.ProductPrice;
 import com.vflores.pos.products.domain.model.ProductPriceType;
@@ -45,6 +46,7 @@ public class RouteSaleService {
     private final RouteSalePaymentRepository routeSalePaymentRepository;
     private final ProductRepository productRepository;
     private final ClientRepository clientRepository;
+    private final DriverRepository driverRepository;
     private final ProductPriceRepository productPriceRepository;
 
     @Transactional(readOnly = true)
@@ -63,6 +65,7 @@ public class RouteSaleService {
 
     @Transactional
     public RouteSaleResponse create(CreateRouteSaleRequest request) {
+        validateDriver(request.driverId());
         SaleComputation computation = computeRouteSale(request.clientId(), request.items());
         Long nextInvoiceNumber = routeSaleRepository.findMaxInvoiceNumber() + 1;
 
@@ -94,6 +97,7 @@ public class RouteSaleService {
             throw new ConflictException("Route sale items cannot be empty");
         }
 
+        validateDriver(request.driverId());
         restoreStockFromDetails(routeSale.getDetails());
         SaleComputation computation = computeRouteSale(request.clientId(), request.items());
 
@@ -303,6 +307,15 @@ public class RouteSaleService {
                 .getContext().getAuthentication();
         var principal = (AuthenticatedUser) authentication.getPrincipal();
         return principal.getId();
+    }
+
+    private void validateDriver(UUID driverId) {
+        if (driverId == null) {
+            throw new ConflictException("driverId is required");
+        }
+        if (!driverRepository.existsById(driverId)) {
+            throw new ResourceNotFoundException("Driver not found: " + driverId);
+        }
     }
 
     private record SaleLineData(
