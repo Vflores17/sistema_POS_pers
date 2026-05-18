@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:8080/api/v1";
+import { API_URL, buildHeaders, fetchWithAuth  } from "./http";
 
 export type PaymentMethod = "CASH" | "SINPE" | "TRANSFER" | "CARD";
 export type SaleStatus = "PENDING" | "PARTIAL" | "PAID" | "CANCELLED";
@@ -56,34 +56,18 @@ interface ApiResponse<T> {
   message?: string;
 }
 
-function getToken(): string {
-  const token = localStorage.getItem("token");
-  if (!token) {
-    throw new Error("Missing auth token");
-  }
-  return token;
-}
 
-function buildHeaders(includeJson: boolean): HeadersInit {
-  const token = getToken();
-  return includeJson
-    ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
-    : { Authorization: `Bearer ${token}` };
-}
 
 async function parseResponse<T>(response: Response, fallback: string): Promise<T> {
   if (!response.ok) {
     let message = fallback;
     try {
       const body = (await response.json()) as {
-        message?: string;
+        error?: { message?: string };
         errors?: Array<{ message?: string }>;
       };
-      if (body.message) {
-        message = body.message;
-      } else if (body.errors && body.errors.length > 0 && body.errors[0].message) {
-        message = body.errors[0].message;
-      }
+      if (body.error?.message) message = body.error.message;
+      else if (body.errors?.[0]?.message) message = body.errors[0].message;
     } catch {
       message = fallback;
     }
@@ -94,7 +78,7 @@ async function parseResponse<T>(response: Response, fallback: string): Promise<T
 }
 
 export async function listSales(): Promise<Sale[]> {
-  const response = await fetch(`${API_URL}/sales`, {
+  const response = await fetchWithAuth(`${API_URL}/sales`, {
     method: "GET",
     headers: buildHeaders(false),
   });
@@ -102,7 +86,7 @@ export async function listSales(): Promise<Sale[]> {
 }
 
 export async function getSaleById(id: string): Promise<Sale> {
-  const response = await fetch(`${API_URL}/sales/${id}`, {
+  const response = await fetchWithAuth(`${API_URL}/sales/${id}`, {
     method: "GET",
     headers: buildHeaders(false),
   });
@@ -110,7 +94,7 @@ export async function getSaleById(id: string): Promise<Sale> {
 }
 
 export async function getNextInvoiceNumber(): Promise<number> {
-  const response = await fetch(`${API_URL}/sales/next-invoice-number`, {
+  const response = await fetchWithAuth(`${API_URL}/sales/next-invoice-number`, {
     method: "GET",
     headers: buildHeaders(false),
   });
@@ -118,7 +102,7 @@ export async function getNextInvoiceNumber(): Promise<number> {
 }
 
 export async function createSale(payload: CreateSalePayload): Promise<Sale> {
-  const response = await fetch(`${API_URL}/sales`, {
+  const response = await fetchWithAuth(`${API_URL}/sales`, {
     method: "POST",
     headers: buildHeaders(true),
     body: JSON.stringify(payload),
@@ -127,7 +111,7 @@ export async function createSale(payload: CreateSalePayload): Promise<Sale> {
 }
 
 export async function updateSale(id: string, payload: UpdateSalePayload): Promise<Sale> {
-  const response = await fetch(`${API_URL}/sales/${id}`, {
+  const response = await fetchWithAuth(`${API_URL}/sales/${id}`, {
     method: "PUT",
     headers: buildHeaders(true),
     body: JSON.stringify(payload),
@@ -136,17 +120,15 @@ export async function updateSale(id: string, payload: UpdateSalePayload): Promis
 }
 
 export async function deleteSale(id: string): Promise<void> {
-  const response = await fetch(`${API_URL}/sales/${id}`, {
+  const response = await fetchWithAuth(`${API_URL}/sales/${id}`, {
     method: "DELETE",
     headers: buildHeaders(false),
   });
-  if (!response.ok) {
-    throw new Error("Failed to delete sale");
-  }
+  if (!response.ok) throw new Error("Failed to delete sale");
 }
 
 export async function changeSaleStatus(id: string, status: SaleStatus): Promise<Sale> {
-  const response = await fetch(`${API_URL}/sales/${id}/status`, {
+  const response = await fetchWithAuth(`${API_URL}/sales/${id}/status`, {
     method: "PATCH",
     headers: buildHeaders(true),
     body: JSON.stringify({ status }),
@@ -158,7 +140,7 @@ export async function savePayments(
   saleId: string,
   payments: CreateSalePaymentPayload[]
 ): Promise<Sale> {
-  const response = await fetch(`${API_URL}/sales/${saleId}/payments`, {
+  const response = await fetchWithAuth(`${API_URL}/sales/${saleId}/payments`, {
     method: "POST",
     headers: buildHeaders(true),
     body: JSON.stringify(payments),

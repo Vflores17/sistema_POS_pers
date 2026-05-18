@@ -1,9 +1,9 @@
-const API_URL = "http://localhost:8080";
+import { API_URL, fetchWithAuth  } from "./http";
 
 export async function getProducts() {
     const token = localStorage.getItem("token");
 
-    const response = await fetch(`${API_URL}/products`, {
+    const response = await fetchWithAuth(`${API_URL}/products`, {
         headers: {
             "Authorization": `Bearer ${token}`
         }

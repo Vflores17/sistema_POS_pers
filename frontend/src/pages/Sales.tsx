@@ -17,12 +17,17 @@ import {
 } from "../api/sales";
 import styles from "./Sales.module.css";
 import Modal from "../components/Modal";
-import { listProducts, createProduct, createProductPrice, getProductPrices, type Product } from "../api/products";
+import {
+  listProducts,
+  createProduct,
+  createProductPrice,
+  getProductPrices,
+  type Product,
+} from "../api/products";
 import TicketPrint from "../components/TicketPrint";
 import CierreCajaPrint from "../components/CierreCajaPrint";
-import * as XLSX from 'xlsx';
+import * as XLSX from "xlsx";
 import FacturaPDF from "../components/FacturaPDF";
-
 
 type SortBy = "invoiceNumber" | "createdAt" | "client" | "total";
 type StatusFilter = "ALL" | SaleStatus;
@@ -57,7 +62,9 @@ interface SaleFormDraft {
 const EMPTY_FORM: SaleFormDraft = {
   clientId: "",
   paymentMethod: "CASH",
-  lines: [{ id: crypto.randomUUID(), productId: "", quantity: 1, unitPrice: "" }],
+  lines: [
+    { id: crypto.randomUUID(), productId: "", quantity: 1, unitPrice: "" },
+  ],
   comments: "",
 };
 
@@ -82,7 +89,6 @@ interface CajaState {
   facturaIds: string[];
   pagos: { facturaId: string; method: string; amount: number }[];
   gastos: { id: string; descripcion: string; monto: number }[]; // 👈
-
 }
 
 const CAJA_STORAGE_KEY = "caja_state";
@@ -95,13 +101,20 @@ function loadCaja(): CajaState {
       return {
         ...parsed,
         pagos: parsed.pagos ?? [],
-        gastos: parsed.gastos ?? [] // 👈
+        gastos: parsed.gastos ?? [], // 👈
       };
     }
   } catch {
     // si falla retorna cerrada
   }
-  return { abierta: false, montoInicial: 0, horaInicio: "", facturaIds: [], pagos: [], gastos: [] };
+  return {
+    abierta: false,
+    montoInicial: 0,
+    horaInicio: "",
+    facturaIds: [],
+    pagos: [],
+    gastos: [],
+  };
 }
 
 function saveCaja(caja: CajaState): void {
@@ -112,7 +125,12 @@ export default function Sales(): ReactElement {
   const [caja, setCaja] = useState<CajaState>(loadCaja);
   const [showAbrirCajaModal, setShowAbrirCajaModal] = useState<boolean>(false);
   const [montoInicialDraft, setMontoInicialDraft] = useState<string>("30000");
-  const [modal, setModal] = useState<ModalState>({ show: false, type: "success", title: "", message: "" });
+  const [modal, setModal] = useState<ModalState>({
+    show: false,
+    type: "success",
+    title: "",
+    message: "",
+  });
 
   const [productModalIndex, setProductModalIndex] = useState<number>(-1);
   const navigate = useNavigate();
@@ -127,7 +145,6 @@ export default function Sales(): ReactElement {
 
   const [sales, setSales] = useState<Sale[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [saleTotal, setSaleTotal] = useState<number>(0);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
@@ -141,18 +158,24 @@ export default function Sales(): ReactElement {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [showClientDropdown, setShowClientDropdown] = useState<boolean>(false);
-  const [showCreateProductModal, setShowCreateProductModal] = useState<boolean>(false);
+  const [showCreateProductModal, setShowCreateProductModal] =
+    useState<boolean>(false);
   const [productModalSearch, setProductModalSearch] = useState<string>("");
 
   const [productDraft, setProductDraft] = useState<ProductDraft>({
-    name: "", description: "", stock: "0",
+    name: "",
+    description: "",
+    stock: "0",
     priceDetail: "0",
     priceWholesale: "0",
     priceNew: "0",
   });
   const [lineSearch, setLineSearch] = useState<Record<string, string>>({});
   const [activeLineId, setActiveLineId] = useState<string>("");
-  const [activeCell, setActiveCell] = useState<{ rowId: string; col: "name" | "quantity" | "price" } | null>(null);
+  const [activeCell, setActiveCell] = useState<{
+    rowId: string;
+    col: "name" | "quantity" | "price";
+  } | null>(null);
 
   const productsById = useMemo(() => {
     return new Map(products.map((product) => [product.id, product]));
@@ -162,13 +185,18 @@ export default function Sales(): ReactElement {
 
   const [viewProduct, setViewProduct] = useState<Product | null>(null);
 
-  const [viewProductPrices, setViewProductPrices] = useState<{ type: string; price: number }[]>([]);
+  const [viewProductPrices, setViewProductPrices] = useState<
+    { type: string; price: number }[]
+  >([]);
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [saleToPrint, setSaleToPrint] = useState<Sale | null>(null);
 
   const [showGastosModal, setShowGastosModal] = useState<boolean>(false);
-  const [gastoDraft, setGastoDraft] = useState<{ descripcion: string; monto: string }>({ descripcion: "", monto: "" });
+  const [gastoDraft, setGastoDraft] = useState<{
+    descripcion: string;
+    monto: string;
+  }>({ descripcion: "", monto: "" });
   const [facturaToPDF] = useState<Sale | null>(null);
   const [whatsappModal, setWhatsappModal] = useState<{
     show: boolean;
@@ -176,6 +204,9 @@ export default function Sales(): ReactElement {
     mensaje: string;
     telefono: string;
   } | null>(null);
+
+  const [originalPayments, setOriginalPayments] =
+    useState<PaymentDraftState>(EMPTY_PAYMENTS);
 
   const [cierreToPrint, setCierreToPrint] = useState<{
     horaInicio: string;
@@ -207,7 +238,7 @@ export default function Sales(): ReactElement {
     const nuevaCaja: CajaState = {
       abierta: true,
       montoInicial: Number(montoInicialDraft),
-      horaInicio: new Date().toLocaleString('es-CR'),
+      horaInicio: new Date().toLocaleString("es-CR"),
       facturaIds: [],
       pagos: [],
       gastos: [], // 👈
@@ -219,22 +250,24 @@ export default function Sales(): ReactElement {
   }
 
   function cerrarCaja(): void {
-    const facturasDeTurno = sales.filter((sale) => caja.facturaIds.includes(sale.id));
+    const facturasDeTurno = sales.filter((sale) =>
+      caja.facturaIds.includes(sale.id),
+    );
 
     const totalEfectivo = caja.pagos
-      .filter(p => p.method === "CASH")
+      .filter((p) => p.method === "CASH")
       .reduce((sum, p) => sum + p.amount, 0);
 
     const totalSinpe = caja.pagos
-      .filter(p => p.method === "SINPE")
+      .filter((p) => p.method === "SINPE")
       .reduce((sum, p) => sum + p.amount, 0);
 
     const totalTransferencia = caja.pagos
-      .filter(p => p.method === "TRANSFER")
+      .filter((p) => p.method === "TRANSFER")
       .reduce((sum, p) => sum + p.amount, 0);
 
     const totalTarjeta = caja.pagos
-      .filter(p => p.method === "CARD")
+      .filter((p) => p.method === "CARD")
       .reduce((sum, p) => sum + p.amount, 0);
     const horaInicio = caja.horaInicio;
     const totalGastos = caja.gastos.reduce((sum, g) => sum + g.monto, 0);
@@ -242,17 +275,17 @@ export default function Sales(): ReactElement {
 
     const mensaje = `
 🕐 Inicio: ${horaInicio}
-💵 Monto inicial: ₡${caja.montoInicial.toLocaleString('es-CR')}
+💵 Monto inicial: ₡${caja.montoInicial.toLocaleString("es-CR")}
 
 📋 Facturas del turno: ${facturasDeTurno.length}
 
-💰 Efectivo: ₡${totalEfectivo.toLocaleString('es-CR')}
-📱 SINPE: ₡${totalSinpe.toLocaleString('es-CR')}
-🏦 Transferencia: ₡${totalTransferencia.toLocaleString('es-CR')}
-💳 Tarjeta: ₡${totalTarjeta.toLocaleString('es-CR')}
+💰 Efectivo: ₡${totalEfectivo.toLocaleString("es-CR")}
+📱 SINPE: ₡${totalSinpe.toLocaleString("es-CR")}
+🏦 Transferencia: ₡${totalTransferencia.toLocaleString("es-CR")}
+💳 Tarjeta: ₡${totalTarjeta.toLocaleString("es-CR")}
 
-🧾 Gastos: ₡${totalGastos.toLocaleString('es-CR')}
-💵 Efectivo neto: ₡${efectivoNeto.toLocaleString('es-CR')}
+🧾 Gastos: ₡${totalGastos.toLocaleString("es-CR")}
+💵 Efectivo neto: ₡${efectivoNeto.toLocaleString("es-CR")}
 
 ⚠️ Recuerde vaciar la memoria del datáfono.
 `.trim();
@@ -268,19 +301,18 @@ export default function Sales(): ReactElement {
         closeModal();
         generarExcelCierre(); // 👈 descargar Excel
 
-
         // 👈 guardar datos para imprimir
         setCierreToPrint({
           horaInicio: caja.horaInicio,
-          horaCierre: new Date().toLocaleString('es-CR'),
+          horaCierre: new Date().toLocaleString("es-CR"),
           montoInicial: caja.montoInicial,
           cantidadFacturas: facturasDeTurno.length,
           totalEfectivo,
           totalSinpe,
           totalTransferencia,
           totalTarjeta,
-          totalGastos,        // 👈
-          efectivoNeto,       // 👈
+          totalGastos, // 👈
+          efectivoNeto, // 👈
           total: totalEfectivo + totalSinpe + totalTransferencia + totalTarjeta,
           gastos: caja.gastos, // 👈
         });
@@ -293,7 +325,7 @@ export default function Sales(): ReactElement {
             horaInicio: "",
             facturaIds: [],
             pagos: [],
-            gastos: []
+            gastos: [],
           };
           setCaja(cajaCerrada);
           saveCaja(cajaCerrada);
@@ -316,14 +348,19 @@ export default function Sales(): ReactElement {
   useEffect(() => {
     if (!isFormScreen) return;
 
-
     function handleKeyDown(e: KeyboardEvent): void {
-
       if (showCreateProductModal || showProductModal || modal.show) return;
       // F2 → Crear producto
       if (e.key === "F2") {
         e.preventDefault();
-        setProductDraft({ name: "", description: "", stock: "0", priceDetail: "0", priceWholesale: "0", priceNew: "0" }); // 👈
+        setProductDraft({
+          name: "",
+          description: "",
+          stock: "0",
+          priceDetail: "0",
+          priceWholesale: "0",
+          priceNew: "0",
+        }); // 👈
         setShowCreateProductModal(true);
       }
       // F3 → Listar productos
@@ -340,7 +377,9 @@ export default function Sales(): ReactElement {
         if (product) {
           setViewProduct(product);
           // 👈 cargar precios
-          getProductPrices(product.id).then(setViewProductPrices).catch(() => setViewProductPrices([]));
+          getProductPrices(product.id)
+            .then(setViewProductPrices)
+            .catch(() => setViewProductPrices([]));
         } else {
           setError("Selecciona una fila con producto.");
         }
@@ -374,7 +413,8 @@ export default function Sales(): ReactElement {
             type: "warning",
             danger: true,
             title: "¿Salir sin guardar?",
-            message: "La factura tiene cambios que no se han guardado. ¿Estás seguro que deseas salir?",
+            message:
+              "La factura tiene cambios que no se han guardado. ¿Estás seguro que deseas salir?",
             confirmLabel: "Salir",
             cancelLabel: "Cancelar",
             onConfirm: () => {
@@ -390,22 +430,29 @@ export default function Sales(): ReactElement {
       // Alt + P → Método de pago
       if (e.altKey && e.key.toLowerCase() === "p") {
         e.preventDefault();
-        const select = document.querySelector<HTMLSelectElement>("select[value]");
+        const select =
+          document.querySelector<HTMLSelectElement>("select[value]");
         select?.focus();
       }
       // Alt + B → Buscar cliente
       if (e.altKey && e.key.toLowerCase() === "b") {
         e.preventDefault();
-        const input = document.querySelector<HTMLInputElement>("input[placeholder='Buscar cliente...']");
+        const input = document.querySelector<HTMLInputElement>(
+          "input[placeholder='Buscar cliente...']",
+        );
         input?.focus();
       }
       if (activeCell) {
-
         const lines = saleDraft.lines;
-        const currentRowIndex = lines.findIndex((line) => line.id === activeCell.rowId);
-        const cols: Array<"name" | "quantity" | "price"> = ["name", "quantity", "price"];
+        const currentRowIndex = lines.findIndex(
+          (line) => line.id === activeCell.rowId,
+        );
+        const cols: Array<"name" | "quantity" | "price"> = [
+          "name",
+          "quantity",
+          "price",
+        ];
         const currentColIndex = cols.indexOf(activeCell.col);
-
 
         if (e.key === "ArrowRight" && activeCell.col !== "price") {
           e.preventDefault();
@@ -428,14 +475,18 @@ export default function Sales(): ReactElement {
         if (e.key === "ArrowDown") {
           e.preventDefault();
           const lines = saleDraft.lines;
-          const currentIndex = lines.findIndex((line) => line.id === selectedRowId);
+          const currentIndex = lines.findIndex(
+            (line) => line.id === selectedRowId,
+          );
           const nextIndex = Math.min(currentIndex + 1, lines.length - 1);
           setSelectedRowId(lines[nextIndex]?.id ?? "");
         }
         if (e.key === "ArrowUp") {
           e.preventDefault();
           const lines = saleDraft.lines;
-          const currentIndex = lines.findIndex((line) => line.id === selectedRowId);
+          const currentIndex = lines.findIndex(
+            (line) => line.id === selectedRowId,
+          );
           const prevIndex = Math.max(currentIndex - 1, 0);
           setSelectedRowId(lines[prevIndex]?.id ?? "");
         }
@@ -448,10 +499,18 @@ export default function Sales(): ReactElement {
       }
     }
 
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isFormScreen, saleDraft, selectedRowId, productsById, addEmptyRow, removeSelectedRow, onSave, navigate]);
+  }, [
+    isFormScreen,
+    saleDraft,
+    selectedRowId,
+    productsById,
+    addEmptyRow,
+    removeSelectedRow,
+    onSave,
+    navigate,
+  ]);
 
   useEffect(() => {
     if (!showProductModal) return;
@@ -510,16 +569,20 @@ export default function Sales(): ReactElement {
       }
       if (e.altKey && e.key.toLowerCase() === "o") {
         e.preventDefault();
-        if (caja.abierta && selectedRowId) navigate(`/sales/${selectedRowId}/edit`);
+        if (caja.abierta && selectedRowId)
+          navigate(`/sales/${selectedRowId}/edit`);
       }
       if (e.altKey && e.key.toLowerCase() === "v") {
         e.preventDefault();
-        if (caja.abierta && selectedRowId) navigate(`/sales/${selectedRowId}/edit`);
+        if (caja.abierta && selectedRowId)
+          navigate(`/sales/${selectedRowId}/edit`);
       }
       if (e.altKey && e.key.toLowerCase() === "i") {
         e.preventDefault();
         if (caja.abierta && selectedRowId) {
-          const sale = sortedAndFilteredSales.find(s => s.id === selectedRowId);
+          const sale = sortedAndFilteredSales.find(
+            (s) => s.id === selectedRowId,
+          );
           if (sale) {
             setSaleToPrint(sale);
             setTimeout(() => window.print(), 300);
@@ -528,12 +591,23 @@ export default function Sales(): ReactElement {
       }
       if (e.altKey && e.key.toLowerCase() === "e") {
         e.preventDefault();
-        if (caja.abierta && selectedRowId) void onDeleteSale(selectedRowId);
+        if (
+          caja.abierta &&
+          selectedRowId &&
+          selectedSale?.status !== "PAID" &&
+          selectedSale?.status !== "PARTIAL"
+        ) {
+          void onDeleteSale(selectedRowId);
+        }
       }
       if (e.altKey && e.key.toLowerCase() === "z") {
         e.preventDefault();
-        if (caja.abierta && selectedRowId &&
-          (selectedSale?.status === "PENDING" || selectedSale?.status === "PARTIAL")) {
+        if (
+          caja.abierta &&
+          selectedRowId &&
+          (selectedSale?.status === "PENDING" ||
+            selectedSale?.status === "PARTIAL")
+        ) {
           navigate(`/sales/${selectedRowId}/edit`);
         }
       }
@@ -555,12 +629,12 @@ export default function Sales(): ReactElement {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isFormScreen, modal.show, selectedRowId, caja, navigate]);
 
-
-
   useEffect(() => {
     if (!selectedRowRef.current) return;
 
-    const container = document.querySelector(`.${styles.gridScrollArea}`) as HTMLElement;
+    const container = document.querySelector(
+      `.${styles.gridScrollArea}`,
+    ) as HTMLElement;
     if (!container) return;
 
     const lines = saleDraft.lines;
@@ -597,11 +671,15 @@ export default function Sales(): ReactElement {
     }
   }, []);
 
-  const [lineDropdownIndex, setLineDropdownIndex] = useState<Record<string, number>>({});
+  const [lineDropdownIndex, setLineDropdownIndex] = useState<
+    Record<string, number>
+  >({});
 
   const activeElement = document.activeElement?.tagName.toLowerCase();
-  const isInputFocused = activeElement === "input" || activeElement === "select" || activeElement === "textarea";
-
+  const isInputFocused =
+    activeElement === "input" ||
+    activeElement === "select" ||
+    activeElement === "textarea";
 
   const clientsById = useMemo(() => {
     return new Map(clients.map((client) => [client.id, client]));
@@ -615,16 +693,18 @@ export default function Sales(): ReactElement {
     return clients.filter((client) => client.name.toLowerCase().includes(term));
   }, [clients, clientSearch]);
 
-  const [paymentDraft, setPaymentDraft] = useState<PaymentDraftState>(EMPTY_PAYMENTS);
-
-
+  const [paymentDraft, setPaymentDraft] =
+    useState<PaymentDraftState>(EMPTY_PAYMENTS);
 
   const calculatedTotal = useMemo(() => {
     return saleDraft.lines.reduce((sum, line) => {
       const product = productsById.get(line.productId);
-      const price = line.unitPrice !== ""
-        ? Number(line.unitPrice)
-        : product ? Number(product.price) : 0;
+      const price =
+        line.unitPrice !== ""
+          ? Number(line.unitPrice)
+          : product
+            ? Number(product.price)
+            : 0;
       return sum + price * line.quantity;
     }, 0);
   }, [saleDraft.lines, productsById]);
@@ -632,7 +712,11 @@ export default function Sales(): ReactElement {
   function onPaymentToggle(method: PaymentMethod, enabled: boolean): void {
     setPaymentDraft((prev) => ({
       ...prev,
-      [method]: { ...prev[method], enabled, amount: enabled ? prev[method].amount : "" },
+      [method]: {
+        ...prev[method],
+        enabled,
+        amount: enabled ? prev[method].amount : "",
+      },
     }));
   }
 
@@ -643,13 +727,17 @@ export default function Sales(): ReactElement {
     }));
   }
 
-  async function resolveUnitPrice(productId: string, clientId: string): Promise<string> {
+  async function resolveUnitPrice(
+    productId: string,
+    clientId: string,
+  ): Promise<string> {
     const client = clientsById.get(clientId);
-    const priceType = client?.type === "WHOLESALE"
-      ? "WHOLESALE"
-      : client?.type === "NEW"
-        ? "NEW"
-        : "DETAIL";
+    const priceType =
+      client?.type === "WHOLESALE"
+        ? "WHOLESALE"
+        : client?.type === "NEW"
+          ? "NEW"
+          : "DETAIL";
 
     try {
       const prices = await getProductPrices(productId);
@@ -657,30 +745,49 @@ export default function Sales(): ReactElement {
       if (!match) throw new Error("No existe precio para el tipo de cliente.");
       return String(match.price);
     } catch (error) {
-      console.error("error en getProductPrices:", error instanceof Error ? error.message : error);
+      console.error(
+        "error en getProductPrices:",
+        error instanceof Error ? error.message : error,
+      );
       throw error;
     }
   }
   const paymentTotal = useMemo(() => {
-    return (Object.keys(paymentDraft) as PaymentMethod[]).reduce((sum, method) => {
-      if (!paymentDraft[method].enabled) return sum;
-      const amount = Number(paymentDraft[method].amount);
-      return sum + (Number.isNaN(amount) ? 0 : amount);
-    }, 0);
+    return (Object.keys(paymentDraft) as PaymentMethod[]).reduce(
+      (sum, method) => {
+        if (!paymentDraft[method].enabled) return sum;
+        const amount = Number(paymentDraft[method].amount);
+        return sum + (Number.isNaN(amount) ? 0 : amount);
+      },
+      0,
+    );
   }, [paymentDraft]);
+
+  const calculatedStatus = useMemo((): SaleStatus => {
+    if (saleDraft.status === "CANCELLED") return "CANCELLED";
+    if (paymentTotal === 0) return "PENDING";
+    if (paymentTotal < calculatedTotal) return "PARTIAL";
+    return "PAID";
+  }, [paymentTotal, calculatedTotal, saleDraft.status]);
+
   const [activeDateFrom, setActiveDateFrom] = useState<string>("");
   const [activeDateTo, setActiveDateTo] = useState<string>("");
   const [activeSortBy, setActiveSortBy] = useState<SortBy>("createdAt");
   const [activeSortDir, setActiveSortDir] = useState<"asc" | "desc">("desc");
-  const [activeStatusFilter, setActiveStatusFilter] = useState<StatusFilter>("ALL");
+  const [activeStatusFilter, setActiveStatusFilter] =
+    useState<StatusFilter>("ALL");
   const [amountOperator, setAmountOperator] = useState<">=" | "<=" | "=">(">=");
   const [amountValue, setAmountValue] = useState<string>("");
-  const [activeAmountOperator, setActiveAmountOperator] = useState<">=" | "<=" | "=">(">=");
+  const [activeAmountOperator, setActiveAmountOperator] = useState<
+    ">=" | "<=" | "="
+  >(">=");
   const [activeAmountValue, setActiveAmountValue] = useState<string>("");
   const [clientFilterSearch, setClientFilterSearch] = useState<string>("");
   const [activeClientId, setActiveClientId] = useState<string>("");
-  const [showClientFilterDropdown, setShowClientFilterDropdown] = useState<boolean>(false);
-  const [clientFilterDropdownIndex, setClientFilterDropdownIndex] = useState<number>(-1);
+  const [showClientFilterDropdown, setShowClientFilterDropdown] =
+    useState<boolean>(false);
+  const [clientFilterDropdownIndex, setClientFilterDropdownIndex] =
+    useState<number>(-1);
 
   const sortedAndFilteredSales = useMemo(() => {
     let result = sales;
@@ -689,13 +796,17 @@ export default function Sales(): ReactElement {
     }
     if (activeDateFrom) {
       result = result.filter((sale) => {
-        const saleDateCR = new Date(new Date(sale.createdAt).getTime() - 6 * 60 * 60 * 1000);
+        const saleDateCR = new Date(
+          new Date(sale.createdAt).getTime() - 6 * 60 * 60 * 1000,
+        );
         return saleDateCR.toISOString().slice(0, 10) >= activeDateFrom;
       });
     }
     if (activeDateTo) {
       result = result.filter((sale) => {
-        const saleDateCR = new Date(new Date(sale.createdAt).getTime() - 6 * 60 * 60 * 1000);
+        const saleDateCR = new Date(
+          new Date(sale.createdAt).getTime() - 6 * 60 * 60 * 1000,
+        );
         return saleDateCR.toISOString().slice(0, 10) <= activeDateTo;
       });
     }
@@ -716,7 +827,8 @@ export default function Sales(): ReactElement {
       if (activeSortBy === "invoiceNumber") {
         comparison = a.invoiceNumber - b.invoiceNumber;
       } else if (activeSortBy === "createdAt") {
-        comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        comparison =
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       } else if (activeSortBy === "total") {
         comparison = Number(a.total) - Number(b.total);
       } else {
@@ -726,13 +838,23 @@ export default function Sales(): ReactElement {
       }
       return activeSortDir === "asc" ? comparison : -comparison;
     });
-  }, [sales, activeSortBy, activeSortDir, activeStatusFilter, clientsById, activeDateFrom, activeDateTo, activeAmountOperator, activeAmountValue, activeClientId]);
+  }, [
+    sales,
+    activeSortBy,
+    activeSortDir,
+    activeStatusFilter,
+    clientsById,
+    activeDateFrom,
+    activeDateTo,
+    activeAmountOperator,
+    activeAmountValue,
+    activeClientId,
+  ]);
 
-  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
-
-
-
-
+  const [dropdownPosition, setDropdownPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
 
   interface ProductDraft {
     name: string;
@@ -742,8 +864,6 @@ export default function Sales(): ReactElement {
     priceWholesale: string;
     priceNew: string;
   }
-
-
 
   function closeModal(): void {
     setModal((prev) => ({ ...prev, show: false }));
@@ -766,7 +886,6 @@ export default function Sales(): ReactElement {
         if ((isEditScreen || isViewScreen) && id) {
           const sale = await getSaleById(id);
           setInvoiceNumber(sale.invoiceNumber);
-          setSaleTotal(Number(sale.total));
           setSaleDraft({
             clientId: sale.clientId,
             paymentMethod: sale.paymentMethod,
@@ -779,7 +898,8 @@ export default function Sales(): ReactElement {
             comments: "",
             status: sale.status,
           });
-          const clientName = baseData[0].find((c) => c.id === sale.clientId)?.name ?? "";
+          const clientName =
+            baseData[0].find((c) => c.id === sale.clientId)?.name ?? "";
           setClientSearch(clientName);
 
           const nextPayments: PaymentDraftState = {
@@ -795,6 +915,7 @@ export default function Sales(): ReactElement {
             };
           }
           setPaymentDraft(nextPayments);
+          setOriginalPayments(nextPayments);
         } else {
           const next = await getNextInvoiceNumber();
           setInvoiceNumber(next);
@@ -805,7 +926,6 @@ export default function Sales(): ReactElement {
           setActiveLineId("");
           setClientDropdownIndex(-1);
           setPaymentDraft(EMPTY_PAYMENTS);
-
         }
       } else {
         const salesData = await listSales();
@@ -818,17 +938,19 @@ export default function Sales(): ReactElement {
     }
   }
 
-
   function onCommentChange(event: ChangeEvent<HTMLTextAreaElement>): void {
     setSaleDraft((prev) => ({ ...prev, comments: event.target.value }));
   }
 
-  async function onLineProductChange(lineId: string, productId: string): Promise<void> {
+  async function onLineProductChange(
+    lineId: string,
+    productId: string,
+  ): Promise<void> {
     if (!productId) {
       setSaleDraft((prev) => ({
         ...prev,
         lines: prev.lines.map((line) =>
-          line.id === lineId ? { ...line, productId, unitPrice: "" } : line
+          line.id === lineId ? { ...line, productId, unitPrice: "" } : line,
         ),
       }));
       return;
@@ -838,14 +960,13 @@ export default function Sales(): ReactElement {
     if (saleDraft.clientId) {
       try {
         unitPrice = await resolveUnitPrice(productId, saleDraft.clientId);
-      } catch {
-      }
+      } catch {}
     }
 
     setSaleDraft((prev) => ({
       ...prev,
       lines: prev.lines.map((line) =>
-        line.id === lineId ? { ...line, productId, unitPrice } : line
+        line.id === lineId ? { ...line, productId, unitPrice } : line,
       ),
     }));
   }
@@ -856,20 +977,28 @@ export default function Sales(): ReactElement {
       ...prev,
       lines: prev.lines.map((line) =>
         line.id === lineId
-          ? { ...line, quantity: Number.isNaN(parsed) ? 0 : Math.max(0, parsed) }
-          : line
+          ? {
+              ...line,
+              quantity: Number.isNaN(parsed) ? 0 : Math.max(0, parsed),
+            }
+          : line,
       ),
     }));
   }
 
   function addEmptyRow(): void {
-    const newLine = { id: crypto.randomUUID(), productId: "", quantity: 1, unitPrice: "" };
+    const newLine = {
+      id: crypto.randomUUID(),
+      productId: "",
+      quantity: 1,
+      unitPrice: "",
+    };
 
     if (!selectedRowId) {
       // Si no hay fila seleccionada, agrega al final
       setSaleDraft((prev) => ({
         ...prev,
-        lines: [...prev.lines, newLine]
+        lines: [...prev.lines, newLine],
       }));
       return;
     }
@@ -889,13 +1018,21 @@ export default function Sales(): ReactElement {
       return;
     }
 
-
-
     setSaleDraft((prev) => {
       const remaining = prev.lines.filter((line) => line.id !== selectedRowId);
       return {
         ...prev,
-        lines: remaining.length > 0 ? remaining : [{ id: crypto.randomUUID(), productId: "", quantity: 1, unitPrice: "" }],
+        lines:
+          remaining.length > 0
+            ? remaining
+            : [
+                {
+                  id: crypto.randomUUID(),
+                  productId: "",
+                  quantity: 1,
+                  unitPrice: "",
+                },
+              ],
       };
     });
     setSelectedRowId("");
@@ -914,14 +1051,21 @@ export default function Sales(): ReactElement {
     setSaleDraft((prev) => ({
       ...prev,
       lines: prev.lines.map((line) =>
-        line.id === lineId ? { ...line, unitPrice: price } : line
+        line.id === lineId ? { ...line, unitPrice: price } : line,
       ),
     }));
   }
 
   async function addProductFromModal(productId: string): Promise<void> {
     if (!saleDraft.clientId) {
-      setError("Selecciona un cliente primero.");
+      setModal({
+        show: true,
+        type: "error",
+        title: "Error",
+        message: "Selecciona un cliente.",
+        confirmLabel: "Aceptar",
+        onConfirm: closeModal,
+      });
       return;
     }
 
@@ -937,12 +1081,15 @@ export default function Sales(): ReactElement {
       if (lines.length === 1 && lines[0].productId === "") {
         return {
           ...prev,
-          lines: [{ id: lines[0].id, productId, quantity: 1, unitPrice }]
+          lines: [{ id: lines[0].id, productId, quantity: 1, unitPrice }],
         };
       }
       return {
         ...prev,
-        lines: [...lines, { id: crypto.randomUUID(), productId, quantity: 1, unitPrice }],
+        lines: [
+          ...lines,
+          { id: crypto.randomUUID(), productId, quantity: 1, unitPrice },
+        ],
       };
     });
     setShowProductModal(false);
@@ -959,7 +1106,8 @@ export default function Sales(): ReactElement {
         message: "Selecciona un cliente.",
         confirmLabel: "Aceptar",
         onConfirm: closeModal,
-      }); return;
+      });
+      return;
     }
 
     const cleanedLines = saleDraft.lines
@@ -996,12 +1144,14 @@ export default function Sales(): ReactElement {
 
     const paymentsPayload = (Object.keys(paymentDraft) as PaymentMethod[])
       .filter((method) => paymentDraft[method].enabled)
-      .map((method) => ({ method, amount: Number(paymentDraft[method].amount) }))
+      .map((method) => ({
+        method,
+        amount: Number(paymentDraft[method].amount),
+      }))
       .filter((payment) => !Number.isNaN(payment.amount) && payment.amount > 0);
 
     const paid = paymentsPayload.reduce((sum, p) => sum + p.amount, 0);
-    const totalToCompare = isEditScreen ? saleTotal : calculatedTotal;
-
+    const totalToCompare = calculatedTotal; // 👈 siempre usar el calculado
 
     if (paid > totalToCompare) {
       setModal({
@@ -1024,27 +1174,50 @@ export default function Sales(): ReactElement {
           quantity: line.quantity,
           price: line.unitPrice !== "" ? Number(line.unitPrice) : undefined,
         })),
+        status: calculatedStatus,
       };
-      const saved = isEditScreen && id
-        ? await updateSale(id, payload)
-        : await createSale(payload);
+      const saved =
+        isEditScreen && id
+          ? await updateSale(id, payload)
+          : await createSale(payload);
       if (caja.abierta) {
         const yaExiste = caja.facturaIds.includes(saved.id);
         const tienePagos = paymentsPayload.length > 0;
         if (!isEditScreen || tienePagos) {
-          const nuevosPagos = paymentsPayload.map(p => ({
-            facturaId: saved.id,
-            method: p.method,
-            amount: p.amount,
-          }));
-          const updatedCaja = {
-            ...caja,
-            facturaIds: yaExiste ? caja.facturaIds : [...caja.facturaIds, saved.id],
-            // 👈 eliminar pagos anteriores de esta factura antes de agregar nuevos
-            pagos: [...caja.pagos.filter(p => p.facturaId !== saved.id), ...nuevosPagos],
-          };
-          setCaja(updatedCaja);
-          saveCaja(updatedCaja);
+          const nuevosPagos: {
+            facturaId: string;
+            method: string;
+            amount: number;
+          }[] = paymentsPayload
+            .map((p) => {
+              const montoOriginal = isEditScreen
+                ? Number(originalPayments[p.method]?.amount ?? 0)
+                : 0;
+              const diferencia = p.amount - montoOriginal;
+              return diferencia > 0
+                ? {
+                    facturaId: saved.id,
+                    method: p.method as string,
+                    amount: diferencia,
+                  }
+                : null;
+            })
+            .filter(
+              (p): p is { facturaId: string; method: string; amount: number } =>
+                p !== null,
+            );
+
+          if (nuevosPagos.length > 0 || !yaExiste) {
+            const updatedCaja = {
+              ...caja,
+              facturaIds: yaExiste
+                ? caja.facturaIds
+                : [...caja.facturaIds, saved.id],
+              pagos: [...caja.pagos, ...nuevosPagos],
+            };
+            setCaja(updatedCaja);
+            saveCaja(updatedCaja);
+          }
         }
       }
       if (paymentsPayload.length > 0) {
@@ -1067,7 +1240,6 @@ export default function Sales(): ReactElement {
       setLineSearch({});
       setPaymentDraft(EMPTY_PAYMENTS);
 
-
       setModal({
         show: true,
         type: "success",
@@ -1081,9 +1253,15 @@ export default function Sales(): ReactElement {
         },
         confirmLabel: "Aceptar",
       });
-
     } catch (err) {
-      setError(readError(err, "No se pudo guardar la venta."));
+      setModal({
+        show: true,
+        type: "error",
+        title: "Error",
+        message: readError(err, "No se pudo guardar la venta."),
+        confirmLabel: "Aceptar",
+        onConfirm: closeModal,
+      });
     } finally {
       setSaving(false);
     }
@@ -1095,7 +1273,8 @@ export default function Sales(): ReactElement {
       type: "confirm",
       danger: true,
       title: "Eliminar factura",
-      message: "¿Estás seguro que deseas eliminar esta factura? Esta acción no se puede deshacer.",
+      message:
+        "¿Estás seguro que deseas eliminar esta factura? Esta acción no se puede deshacer.",
       confirmLabel: "Eliminar",
       cancelLabel: "Cancelar",
       onConfirm: async () => {
@@ -1117,194 +1296,273 @@ export default function Sales(): ReactElement {
 
   if (isFormScreen) {
     return (
-      <div style={{
-        background: "#f0f4f0",
-        minHeight: "90vh",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "flex-start",
-        padding: "1rem"
-      }}>        <section className={styles.container}>
+      <div
+        style={{
+          background: "#f0f4f0",
+          minHeight: "90vh",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "flex-start",
+          padding: "1rem",
+        }}
+      >
+        {" "}
+        <section className={styles.container}>
           <header className={styles.header}>
             <h2 className={styles.title}>
-              {isEditScreen ? "Modificar Venta" : isViewScreen ? "Visualización de Factura" : "Nueva Venta"}
+              {isEditScreen
+                ? "Modificar Venta"
+                : isViewScreen
+                  ? "Visualización de Factura"
+                  : "Nueva Venta"}
             </h2>
           </header>
 
           {error ? <p className={styles.error}>{error}</p> : null}
 
-          <div className={styles.card}>          <div className={styles.topGrid}>
-            <div className={styles.field}>
-              <label>Número de factura</label>
-              <div className={styles.invoiceNumber}>{invoiceNumber || "—"}</div>
-            </div>
-            <div className={styles.field}>
-              <label><u>B</u>uscar cliente</label>
-              <div style={{ position: "relative", zIndex: 50 }}>
-                <input
-                  value={clientSearch}
-                  readOnly={isViewScreen}
-                  onChange={(e) => {
-                    if (isViewScreen) return;
-                    setClientSearch(e.target.value);
-                    setSaleDraft((prev) => ({ ...prev, clientId: "" }));
-                    setShowClientDropdown(true);
-                    setClientDropdownIndex(-1);
-                  }}
-                  onFocus={() => {
-                    if (isViewScreen) return; // 👈
-                    setShowClientDropdown(true);
-                  }} onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
-                  onKeyDown={(e) => {
-                    if (!showClientDropdown) return;
-                    const options = filteredClientOptions.slice(0, 4);
-                    if (e.key === "ArrowDown") {
-                      e.preventDefault();
-                      setClientDropdownIndex((prev) => Math.min(prev + 1, options.length - 1));
-                    }
-                    if (e.key === "ArrowUp") {
-                      e.preventDefault();
-                      setClientDropdownIndex((prev) => Math.max(prev - 1, 0));
-                    }
-                    if (e.key === "Enter" && clientDropdownIndex >= 0) {
-                      e.preventDefault();
-                      const selected = options[clientDropdownIndex];
-                      setSaleDraft((prev) => ({ ...prev, clientId: selected.id }));
-                      setClientSearch(selected.name);
-                      setShowClientDropdown(false);
+          <div className={styles.card}>
+            {" "}
+            <div className={styles.topGrid}>
+              <div className={styles.field}>
+                <label>Número de factura</label>
+                <div className={styles.invoiceNumber}>
+                  {invoiceNumber || "—"}
+                </div>
+              </div>
+              <div className={styles.field}>
+                <label>
+                  <u>B</u>uscar cliente
+                </label>
+                <div style={{ position: "relative", zIndex: 50 }}>
+                  <input
+                    value={clientSearch}
+                    readOnly={isViewScreen}
+                    onChange={(e) => {
+                      if (isViewScreen) return;
+                      setClientSearch(e.target.value);
+                      setSaleDraft((prev) => ({ ...prev, clientId: "" }));
+                      setShowClientDropdown(true);
                       setClientDropdownIndex(-1);
+                    }}
+                    onFocus={() => {
+                      if (isViewScreen) return; // 👈
+                      setShowClientDropdown(true);
+                    }}
+                    onBlur={() =>
+                      setTimeout(() => setShowClientDropdown(false), 200)
                     }
-                    if (e.key === "Escape") {
-                      setShowClientDropdown(false);
-                      setClientDropdownIndex(-1);
-                    }
+                    onKeyDown={(e) => {
+                      if (!showClientDropdown) return;
+                      const options = filteredClientOptions.slice(0, 4);
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setClientDropdownIndex((prev) =>
+                          Math.min(prev + 1, options.length - 1),
+                        );
+                      }
+                      if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setClientDropdownIndex((prev) => Math.max(prev - 1, 0));
+                      }
+                      if (e.key === "Enter" && clientDropdownIndex >= 0) {
+                        e.preventDefault();
+                        const selected = options[clientDropdownIndex];
+                        setSaleDraft((prev) => ({
+                          ...prev,
+                          clientId: selected.id,
+                        }));
+                        setClientSearch(selected.name);
+                        setShowClientDropdown(false);
+                        setClientDropdownIndex(-1);
+                      }
+                      if (e.key === "Escape") {
+                        setShowClientDropdown(false);
+                        setClientDropdownIndex(-1);
+                      }
+                    }}
+                    placeholder="Buscar cliente..."
+                    autoComplete="off"
+                  />
+                  {showClientDropdown && (
+                    <div className={styles.clientDropdown}>
+                      {filteredClientOptions
+                        .slice(0, 4)
+                        .map((client, index) => (
+                          <div
+                            key={client.id}
+                            className={styles.clientOption}
+                            style={
+                              index === clientDropdownIndex
+                                ? { background: "#d1fae5", color: "#16a34a" }
+                                : {}
+                            }
+                            onMouseDown={() => {
+                              setSaleDraft((prev) => ({
+                                ...prev,
+                                clientId: client.id,
+                              }));
+                              setClientSearch(client.name);
+                              setShowClientDropdown(false);
+                              setClientDropdownIndex(-1);
+                            }}
+                            onMouseEnter={() => setClientDropdownIndex(index)}
+                          >
+                            {client.name}
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className={styles.field} style={{ gridColumn: "span 2" }}>
+                <label>
+                  Método de <u>P</u>ago
+                </label>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(4, 1fr)",
+                    gap: "0.5rem",
+                    marginTop: "0.25rem",
                   }}
-                  placeholder="Buscar cliente..."
-                  autoComplete="off"
-                />
-                {showClientDropdown && (
-                  <div className={styles.clientDropdown}>
-                    {filteredClientOptions.slice(0, 4).map((client, index) => (
-                      <div
-                        key={client.id}
-                        className={styles.clientOption}
-                        style={index === clientDropdownIndex ? { background: "#d1fae5", color: "#16a34a" } : {}}
-                        onMouseDown={() => {
-                          setSaleDraft((prev) => ({ ...prev, clientId: client.id }));
-                          setClientSearch(client.name);
-                          setShowClientDropdown(false);
-                          setClientDropdownIndex(-1);
+                >
+                  {[
+                    { key: "CASH" as PaymentMethod, label: "Efectivo" },
+                    { key: "SINPE" as PaymentMethod, label: "SINPE" },
+                    {
+                      key: "TRANSFER" as PaymentMethod,
+                      label: "Transferencia",
+                    },
+                    { key: "CARD" as PaymentMethod, label: "Tarjeta" },
+                  ].map((item) => (
+                    <div
+                      key={item.key}
+                      style={{
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 8,
+                        padding: "0.5rem",
+                      }}
+                    >
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.4rem",
+                          cursor: "pointer",
                         }}
-                        onMouseEnter={() => setClientDropdownIndex(index)}
                       >
-                        {client.name}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                        <input
+                          type="checkbox"
+                          checked={paymentDraft[item.key].enabled}
+                          onChange={(event) =>
+                            onPaymentToggle(item.key, event.target.checked)
+                          }
+                          disabled={isViewScreen} // 👈
+                        />
+                        {item.label}
+                      </label>
+                      {paymentDraft[item.key].enabled && (
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="Monto"
+                          value={paymentDraft[item.key].amount}
+                          onChange={(e) =>
+                            onPaymentAmountChange(item.key, e.target.value)
+                          }
+                          style={{ width: "100%", marginTop: "0.25rem" }}
+                          disabled={isViewScreen}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div
+                  style={{
+                    marginTop: "0.5rem",
+                    fontSize: "0.9rem",
+                    color: "#4b5563",
+                  }}
+                >
+                  Suma pagos: ₡{paymentTotal.toLocaleString("es-CR")} / Total: ₡
+                  {calculatedTotal.toLocaleString("es-CR")}
+                  {paymentTotal > 0 && paymentTotal < calculatedTotal && (
+                    <span style={{ color: "#b45309", marginLeft: "0.5rem" }}>
+                      ⚠️ Faltante: ₡
+                      {(calculatedTotal - paymentTotal).toLocaleString("es-CR")}
+                    </span>
+                  )}
+                  {paymentTotal > calculatedTotal && (
+                    <span style={{ color: "#dc2626", marginLeft: "0.5rem" }}>
+                      ❌ Excedente: ₡
+                      {(paymentTotal - calculatedTotal).toLocaleString("es-CR")}
+                    </span>
+                  )}
+                  {paymentTotal > 0 && paymentTotal === calculatedTotal && (
+                    <span style={{ color: "#16a34a", marginLeft: "0.5rem" }}>
+                      ✅ Pago completo
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-            <div className={styles.field} style={{ gridColumn: "span 2" }}>
-              <label>Método de <u>P</u>ago</label>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.5rem", marginTop: "0.25rem" }}>
-                {([
-                  { key: "CASH" as PaymentMethod, label: "Efectivo" },
-                  { key: "SINPE" as PaymentMethod, label: "SINPE" },
-                  { key: "TRANSFER" as PaymentMethod, label: "Transferencia" },
-                  { key: "CARD" as PaymentMethod, label: "Tarjeta" },
-                ]).map((item) => (
-                  <div key={item.key} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "0.5rem" }}>
-                    <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", cursor: "pointer" }}>
-                      <input
-                        type="checkbox"
-                        checked={paymentDraft[item.key].enabled}
-                        onChange={(event) => onPaymentToggle(item.key, event.target.checked)}
-                        disabled={isViewScreen} // 👈
-                      />
-                      {item.label}
-                    </label>
-                    {paymentDraft[item.key].enabled && (
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="Monto"
-                        value={paymentDraft[item.key].amount}
-                        onChange={(e) => onPaymentAmountChange(item.key, e.target.value)}
-                        style={{ width: "100%", marginTop: "0.25rem" }}
-                        disabled={isViewScreen}
-                      />
-                    )}
-                  </div>
-                ))}
+              <div className={styles.field}>
+                <label>Vendedor</label>
+                <input value={sessionUserLabel} readOnly />
               </div>
-              <div style={{ marginTop: "0.5rem", fontSize: "0.9rem", color: "#4b5563" }}>
-                Suma pagos: ₡{paymentTotal.toLocaleString('es-CR')} / Total: ₡{calculatedTotal.toLocaleString('es-CR')}
-                {paymentTotal > 0 && paymentTotal < calculatedTotal && (
-                  <span style={{ color: "#b45309", marginLeft: "0.5rem" }}>
-                    ⚠️ Faltante: ₡{(calculatedTotal - paymentTotal).toLocaleString('es-CR')}
-                  </span>
-                )}
-                {paymentTotal > calculatedTotal && (
-                  <span style={{ color: "#dc2626", marginLeft: "0.5rem" }}>
-                    ❌ Excedente: ₡{(paymentTotal - calculatedTotal).toLocaleString('es-CR')}
-                  </span>
-                )}
-                {paymentTotal > 0 && paymentTotal === calculatedTotal && (
-                  <span style={{ color: "#16a34a", marginLeft: "0.5rem" }}>
-                    ✅ Pago completo
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className={styles.field}>
-              <label>Vendedor</label>
-              <input value={sessionUserLabel} readOnly />
-            </div>
-            <div className={styles.field}>
-              <label>Estado</label>
-              <select
-                value={saleDraft.status ?? "PENDING"}
-                disabled={isViewScreen}
-                onChange={async (e) => {
-
-                  const newStatus = e.target.value as SaleStatus;
-                  if (isEditScreen && id) {
-                    // En edición → llama al backend de inmediato
-                    try {
-                      await changeSaleStatus(id, newStatus);
-                    } catch {
-                      setError("No se pudo cambiar el estado.");
-                      return;
-                    }
+              <div className={styles.field}>
+                <label>Estado</label>
+                <select
+                  value={
+                    calculatedStatus === "CANCELLED"
+                      ? "CANCELLED"
+                      : saleDraft.status === "CANCELLED"
+                        ? "CANCELLED"
+                        : calculatedStatus
                   }
-                  // En ambos casos actualiza el estado local
-                  setSaleDraft((prev) => ({ ...prev, status: newStatus }));
-                }}
-              >
-                <option value="PENDING">Pendiente</option>
-                <option value="PARTIAL">Parciales</option>
-                <option value="PAID">Pagada</option>
-                <option value="CANCELLED">Cancelada</option>
-              </select>
+                  disabled={
+                    !isEditScreen ||
+                    (saleDraft.status !== "PENDING" &&
+                      saleDraft.status !== "PARTIAL")
+                  }
+                  onChange={async (e) => {
+                    const newStatus = e.target.value as SaleStatus;
+                    setSaleDraft((prev) => ({ ...prev, status: newStatus }));
+                  }}
+                >
+                  <option value="PENDING">Pendiente</option>
+                  <option value="PARTIAL">Parcial</option>
+                  <option value="PAID">Pagada</option>
+                  <option value="CANCELLED">Cancelada</option>
+                </select>
+              </div>
             </div>
-          </div>
-
             {!isViewScreen && (
               <div className={styles.menuBar}>
-                <button className={styles.primaryButton} type="button"
-                  onClick={() => setShowCreateProductModal(true)}>
+                <button
+                  className={styles.primaryButton}
+                  type="button"
+                  onClick={() => setShowCreateProductModal(true)}
+                >
                   Crear producto <kbd>F2</kbd>
                 </button>
-                <button className={styles.button} type="button" onClick={() => setShowProductModal(true)}>
+                <button
+                  className={styles.button}
+                  type="button"
+                  onClick={() => setShowProductModal(true)}
+                >
                   Listar productos <kbd>F3</kbd>
                 </button>
                 <button
                   className={styles.button}
                   type="button"
                   onClick={() => {
-                    const line = saleDraft.lines.find((item) => item.id === selectedRowId);
-                    const product = line ? productsById.get(line.productId) : undefined;
+                    const line = saleDraft.lines.find(
+                      (item) => item.id === selectedRowId,
+                    );
+                    const product = line
+                      ? productsById.get(line.productId)
+                      : undefined;
                     if (product) {
                       setViewProduct(product);
                     } else {
@@ -1314,15 +1572,22 @@ export default function Sales(): ReactElement {
                 >
                   Ver producto <kbd>F4</kbd>
                 </button>
-                <button className={styles.button} type="button" onClick={addEmptyRow}>
+                <button
+                  className={styles.button}
+                  type="button"
+                  onClick={addEmptyRow}
+                >
                   Agregar fila <kbd>F5</kbd>
                 </button>
-                <button className={styles.dangerButton} type="button" onClick={removeSelectedRow}>
+                <button
+                  className={styles.dangerButton}
+                  type="button"
+                  onClick={removeSelectedRow}
+                >
                   Eliminar fila <kbd>F6</kbd>
                 </button>
               </div>
             )}
-
             <div className={styles.gridScrollArea}>
               <table className={styles.table}>
                 <thead>
@@ -1336,15 +1601,20 @@ export default function Sales(): ReactElement {
                 <tbody>
                   {saleDraft.lines.map((line) => {
                     const product = productsById.get(line.productId);
-                    const unitPrice = line.unitPrice !== ""
-                      ? Number(line.unitPrice)
-                      : product ? Number(product.price) : 0;
+                    const unitPrice =
+                      line.unitPrice !== ""
+                        ? Number(line.unitPrice)
+                        : product
+                          ? Number(product.price)
+                          : 0;
                     return (
                       <tr
                         key={line.id}
                         ref={selectedRowId === line.id ? selectedRowRef : null}
                         onClick={() => setSelectedRowId(line.id)}
-                        className={selectedRowId === line.id ? styles.selected : ""}
+                        className={
+                          selectedRowId === line.id ? styles.selected : ""
+                        }
                         style={{ cursor: "pointer" }}
                       >
                         <td>
@@ -1359,54 +1629,92 @@ export default function Sales(): ReactElement {
                             }
                             onChange={(e) => {
                               if (isViewScreen) return;
-                              setLineSearch((prev) => ({ ...prev, [line.id]: e.target.value }));
+                              setLineSearch((prev) => ({
+                                ...prev,
+                                [line.id]: e.target.value,
+                              }));
                               void onLineProductChange(line.id, "");
-                              setLineDropdownIndex((prev) => ({ ...prev, [line.id]: -1 }));
+                              setLineDropdownIndex((prev) => ({
+                                ...prev,
+                                [line.id]: -1,
+                              }));
                             }}
                             onFocus={(e) => {
                               if (isViewScreen) return;
                               setActiveLineId(line.id);
                               setSelectedRowId(line.id);
                               setActiveCell({ rowId: line.id, col: "name" });
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              setDropdownPosition({ top: rect.bottom, left: rect.left });
+                              const rect =
+                                e.currentTarget.getBoundingClientRect();
+                              setDropdownPosition({
+                                top: rect.bottom,
+                                left: rect.left,
+                              });
                             }}
-                            onBlur={() => setTimeout(() => setActiveLineId(""), 500)}
+                            onBlur={() =>
+                              setTimeout(() => setActiveLineId(""), 500)
+                            }
                             onKeyDown={(e) => {
                               if (activeLineId !== line.id) return;
                               const options = products
                                 .filter((p) =>
-                                  p.name.toLowerCase().includes((lineSearch[line.id] ?? "").toLowerCase())
+                                  p.name
+                                    .toLowerCase()
+                                    .includes(
+                                      (lineSearch[line.id] ?? "").toLowerCase(),
+                                    ),
                                 )
                                 .slice(0, 5);
                               if (e.key === "ArrowDown") {
                                 e.preventDefault();
                                 setLineDropdownIndex((prev) => ({
                                   ...prev,
-                                  [line.id]: Math.min((prev[line.id] ?? -1) + 1, options.length - 1)
+                                  [line.id]: Math.min(
+                                    (prev[line.id] ?? -1) + 1,
+                                    options.length - 1,
+                                  ),
                                 }));
                               }
                               if (e.key === "ArrowUp") {
                                 e.preventDefault();
                                 setLineDropdownIndex((prev) => ({
                                   ...prev,
-                                  [line.id]: Math.max((prev[line.id] ?? 0) - 1, 0)
+                                  [line.id]: Math.max(
+                                    (prev[line.id] ?? 0) - 1,
+                                    0,
+                                  ),
                                 }));
                               }
-                              if (e.key === "Enter" && (lineDropdownIndex[line.id] ?? -1) >= 0) {
+                              if (
+                                e.key === "Enter" &&
+                                (lineDropdownIndex[line.id] ?? -1) >= 0
+                              ) {
                                 e.preventDefault();
-                                const selected = options[lineDropdownIndex[line.id]];
+                                const selected =
+                                  options[lineDropdownIndex[line.id]];
                                 void onLineProductChange(line.id, selected.id);
-                                setLineSearch((prev) => ({ ...prev, [line.id]: "" }));
+                                setLineSearch((prev) => ({
+                                  ...prev,
+                                  [line.id]: "",
+                                }));
                                 setActiveLineId("");
-                                setLineDropdownIndex((prev) => ({ ...prev, [line.id]: -1 }));
+                                setLineDropdownIndex((prev) => ({
+                                  ...prev,
+                                  [line.id]: -1,
+                                }));
                               }
                               if (e.key === "Escape") {
                                 setActiveLineId("");
-                                setLineDropdownIndex((prev) => ({ ...prev, [line.id]: -1 }));
+                                setLineDropdownIndex((prev) => ({
+                                  ...prev,
+                                  [line.id]: -1,
+                                }));
                               }
 
-                              if (e.key === "ArrowRight" && (lineDropdownIndex[line.id] ?? -1) < 0) {
+                              if (
+                                e.key === "ArrowRight" &&
+                                (lineDropdownIndex[line.id] ?? -1) < 0
+                              ) {
                                 e.preventDefault();
                                 focusCell(line.id, "quantity");
                               }
@@ -1422,27 +1730,48 @@ export default function Sales(): ReactElement {
                                 left: dropdownPosition?.left ?? 0,
                                 zIndex: 9999,
                                 width: "200px",
-                                pointerEvents: "all" // 👈
+                                pointerEvents: "all", // 👈
                               }}
                             >
                               {products
                                 .filter((p) =>
-                                  p.name.toLowerCase().includes((lineSearch[line.id] ?? "").toLowerCase())
+                                  p.name
+                                    .toLowerCase()
+                                    .includes(
+                                      (lineSearch[line.id] ?? "").toLowerCase(),
+                                    ),
                                 )
                                 .slice(0, 5)
                                 .map((p, index) => (
                                   <div
                                     key={p.id}
                                     className={styles.clientOption}
-                                    style={index === (lineDropdownIndex[line.id] ?? -1)
-                                      ? { background: "#d1fae5", color: "#16a34a" }
-                                      : {}}
-                                    onMouseEnter={() => setLineDropdownIndex((prev) => ({ ...prev, [line.id]: index }))}
+                                    style={
+                                      index ===
+                                      (lineDropdownIndex[line.id] ?? -1)
+                                        ? {
+                                            background: "#d1fae5",
+                                            color: "#16a34a",
+                                          }
+                                        : {}
+                                    }
+                                    onMouseEnter={() =>
+                                      setLineDropdownIndex((prev) => ({
+                                        ...prev,
+                                        [line.id]: index,
+                                      }))
+                                    }
                                     onMouseDown={() => {
                                       void onLineProductChange(line.id, p.id);
-                                      setLineSearch((prev) => ({ ...prev, [line.id]: "" }));
+                                      setLineSearch((prev) => ({
+                                        ...prev,
+                                        [line.id]: "",
+                                      }));
                                       setActiveLineId("");
-                                      setLineDropdownIndex((prev) => ({ ...prev, [line.id]: -1 }));
+                                      setLineDropdownIndex((prev) => ({
+                                        ...prev,
+                                        [line.id]: -1,
+                                      }));
                                     }}
                                   >
                                     {p.name}
@@ -1454,17 +1783,24 @@ export default function Sales(): ReactElement {
                         <td>
                           <input
                             readOnly={isViewScreen}
-                            ref={(el) => { cellRefs.current[`${line.id}-quantity`] = el; }}
+                            ref={(el) => {
+                              cellRefs.current[`${line.id}-quantity`] = el;
+                            }}
                             type="number"
                             min={1}
                             step={1}
                             value={line.quantity}
                             onFocus={() => {
                               setSelectedRowId(line.id);
-                              setActiveCell({ rowId: line.id, col: "quantity" });
+                              setActiveCell({
+                                rowId: line.id,
+                                col: "quantity",
+                              });
                             }}
                             onBlur={() => setActiveCell(null)}
-                            onChange={(event) => onLineQuantityChange(line.id, event.target.value)}
+                            onChange={(event) =>
+                              onLineQuantityChange(line.id, event.target.value)
+                            }
                             onKeyDown={(e) => {
                               if (e.key === "ArrowRight") {
                                 e.preventDefault();
@@ -1477,14 +1813,20 @@ export default function Sales(): ReactElement {
                               if (e.key === "ArrowDown") {
                                 e.preventDefault();
                                 const lines = saleDraft.lines;
-                                const idx = lines.findIndex((l) => l.id === line.id);
-                                if (lines[idx + 1]) focusCell(lines[idx + 1].id, "quantity");
+                                const idx = lines.findIndex(
+                                  (l) => l.id === line.id,
+                                );
+                                if (lines[idx + 1])
+                                  focusCell(lines[idx + 1].id, "quantity");
                               }
                               if (e.key === "ArrowUp") {
                                 e.preventDefault();
                                 const lines = saleDraft.lines;
-                                const idx = lines.findIndex((l) => l.id === line.id);
-                                if (lines[idx - 1]) focusCell(lines[idx - 1].id, "quantity");
+                                const idx = lines.findIndex(
+                                  (l) => l.id === line.id,
+                                );
+                                if (lines[idx - 1])
+                                  focusCell(lines[idx - 1].id, "quantity");
                               }
                             }}
                           />
@@ -1492,17 +1834,23 @@ export default function Sales(): ReactElement {
                         <td>
                           <input
                             readOnly={isViewScreen}
-                            ref={(el) => { cellRefs.current[`${line.id}-price`] = el; }}
+                            ref={(el) => {
+                              cellRefs.current[`${line.id}-price`] = el;
+                            }}
                             type="number"
                             min="0"
                             step="0.01"
-                            value={line.unitPrice !== "" ? line.unitPrice : unitPrice}
+                            value={
+                              line.unitPrice !== "" ? line.unitPrice : unitPrice
+                            }
                             onFocus={() => {
                               setSelectedRowId(line.id);
                               setActiveCell({ rowId: line.id, col: "price" });
                             }}
                             onBlur={() => setActiveCell(null)}
-                            onChange={(e) => onLinePriceChange(line.id, e.target.value)}
+                            onChange={(e) =>
+                              onLinePriceChange(line.id, e.target.value)
+                            }
                             onKeyDown={(e) => {
                               if (e.key === "ArrowLeft") {
                                 e.preventDefault();
@@ -1511,47 +1859,73 @@ export default function Sales(): ReactElement {
                               if (e.key === "ArrowDown") {
                                 e.preventDefault();
                                 const lines = saleDraft.lines;
-                                const idx = lines.findIndex((l) => l.id === line.id);
-                                if (lines[idx + 1]) focusCell(lines[idx + 1].id, "price");
+                                const idx = lines.findIndex(
+                                  (l) => l.id === line.id,
+                                );
+                                if (lines[idx + 1])
+                                  focusCell(lines[idx + 1].id, "price");
                               }
                               if (e.key === "ArrowUp") {
                                 e.preventDefault();
                                 const lines = saleDraft.lines;
-                                const idx = lines.findIndex((l) => l.id === line.id);
-                                if (lines[idx - 1]) focusCell(lines[idx - 1].id, "price");
+                                const idx = lines.findIndex(
+                                  (l) => l.id === line.id,
+                                );
+                                if (lines[idx - 1])
+                                  focusCell(lines[idx - 1].id, "price");
                               }
                             }}
                           />
                         </td>
-                        <td>{(unitPrice * line.quantity).toLocaleString('es-CR')}</td>
+                        <td>
+                          {(unitPrice * line.quantity).toLocaleString("es-CR")}
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
-
             <div className={styles.commentsWrap}>
               <label>Comentarios (solo impresión)</label>
-              <textarea value={saleDraft.comments} onChange={onCommentChange} rows={3} />
+              <textarea
+                value={saleDraft.comments}
+                onChange={onCommentChange}
+                rows={3}
+              />
             </div>
-
           </div>
 
           <div className={styles.formBottomBar}>
-            <p className={styles.totalBar}>Total: ₡{calculatedTotal.toLocaleString('es-CR')}</p>
+            <p className={styles.totalBar}>
+              Total: ₡{calculatedTotal.toLocaleString("es-CR")}
+            </p>
             <div className={styles.bottomActions}>
               {!isViewScreen && (
                 <>
-                  <button className={styles.primaryButton} type="button" disabled={saving} onClick={() => void onSave(false)}>
+                  <button
+                    className={styles.primaryButton}
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void onSave(false)}
+                  >
                     Guard<u>a</u>r
                   </button>
-                  <button className={styles.button} type="button" disabled={saving} onClick={() => void onSave(true)}>
+                  <button
+                    className={styles.button}
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void onSave(true)}
+                  >
                     Guardar e I<u>m</u>primir
                   </button>
                 </>
               )}
-              <button className={styles.button} type="button" onClick={() => navigate("/sales")}>
+              <button
+                className={styles.button}
+                type="button"
+                onClick={() => navigate("/sales")}
+              >
                 <u>S</u>alir
               </button>
             </div>
@@ -1562,49 +1936,80 @@ export default function Sales(): ReactElement {
               <div className={styles.modal}>
                 <header className={styles.modalHeader}>
                   <h3>Crear Producto</h3>
-                  <button className={styles.button} type="button"
-                    onClick={() => setShowCreateProductModal(false)}>
+                  <button
+                    className={styles.button}
+                    type="button"
+                    onClick={() => setShowCreateProductModal(false)}
+                  >
                     Cerrar <kbd>Esc</kbd>
                   </button>
                 </header>
 
-                <div className={styles.topGrid} style={{ gridTemplateColumns: "1fr 1fr" }}>
+                <div
+                  className={styles.topGrid}
+                  style={{ gridTemplateColumns: "1fr 1fr" }}
+                >
                   <div className={styles.field}>
                     <label>Nombre</label>
                     <input
                       value={productDraft.name}
-                      onChange={(e) => setProductDraft(prev => ({ ...prev, name: e.target.value }))}
+                      onChange={(e) =>
+                        setProductDraft((prev) => ({
+                          ...prev,
+                          name: e.target.value,
+                        }))
+                      }
                       placeholder="Nombre del producto"
-
                     />
                   </div>
                   <div className={styles.field}>
                     <label>Descripción</label>
                     <input
                       value={productDraft.description}
-                      onChange={(e) => setProductDraft(prev => ({ ...prev, description: e.target.value }))}
+                      onChange={(e) =>
+                        setProductDraft((prev) => ({
+                          ...prev,
+                          description: e.target.value,
+                        }))
+                      }
                       placeholder="Opcional"
                     />
                   </div>
                   <div className={styles.field}>
                     <label>Stock</label>
                     <input
-                      type="number" min="0"
+                      type="number"
+                      min="0"
                       value={productDraft.stock}
-                      onChange={(e) => setProductDraft(prev => ({ ...prev, stock: e.target.value }))}
+                      onChange={(e) =>
+                        setProductDraft((prev) => ({
+                          ...prev,
+                          stock: e.target.value,
+                        }))
+                      }
                     />
                   </div>
                   <div className={styles.field}>
                     <label>Precio Detalle</label>
                     <input
                       id="priceDetailInput"
-                      type="number" min="0"
+                      type="number"
+                      min="0"
                       value={productDraft.priceDetail}
-                      onChange={(e) => setProductDraft(prev => ({ ...prev, priceDetail: e.target.value }))}
+                      onChange={(e) =>
+                        setProductDraft((prev) => ({
+                          ...prev,
+                          priceDetail: e.target.value,
+                        }))
+                      }
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();
-                          document.querySelector<HTMLInputElement>("#priceDetailInput")?.focus();
+                          document
+                            .querySelector<HTMLInputElement>(
+                              "#priceDetailInput",
+                            )
+                            ?.focus();
                         }
                       }}
                     />
@@ -1613,13 +2018,21 @@ export default function Sales(): ReactElement {
                     <label>Precio Mayorista</label>
                     <input
                       id="priceWholesaleInput"
-                      type="number" min="0"
+                      type="number"
+                      min="0"
                       value={productDraft.priceWholesale}
-                      onChange={(e) => setProductDraft(prev => ({ ...prev, priceWholesale: e.target.value }))}
+                      onChange={(e) =>
+                        setProductDraft((prev) => ({
+                          ...prev,
+                          priceWholesale: e.target.value,
+                        }))
+                      }
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();
-                          document.querySelector<HTMLButtonElement>("#saveProductBtn")?.click();
+                          document
+                            .querySelector<HTMLButtonElement>("#saveProductBtn")
+                            ?.click();
                         }
                       }}
                     />
@@ -1627,14 +2040,23 @@ export default function Sales(): ReactElement {
                   <div className={styles.field}>
                     <label>Precio Nuevo</label>
                     <input
-                      type="number" min="0"
+                      type="number"
+                      min="0"
                       value={productDraft.priceNew}
-                      onChange={(e) => setProductDraft(prev => ({ ...prev, priceNew: e.target.value }))}
+                      onChange={(e) =>
+                        setProductDraft((prev) => ({
+                          ...prev,
+                          priceNew: e.target.value,
+                        }))
+                      }
                     />
                   </div>
                 </div>
 
-                <div className={styles.formBottomBar} style={{ background: "transparent", padding: 0 }}>
+                <div
+                  className={styles.formBottomBar}
+                  style={{ background: "transparent", padding: 0 }}
+                >
                   <button
                     id="saveProductBtn"
                     className={styles.primaryButton}
@@ -1646,14 +2068,25 @@ export default function Sales(): ReactElement {
                           description: productDraft.description,
                           stock: Number(productDraft.stock),
                           price: Number(productDraft.priceDetail),
-                          status: "ACTIVE"
+                          status: "ACTIVE",
                         });
 
                         // 👈 Crear precios
-                        await createProductPrice(created.id, "DETAIL", Number(productDraft.priceDetail));
-                        await createProductPrice(created.id, "WHOLESALE", Number(productDraft.priceWholesale));
-                        await createProductPrice(created.id, "NEW", Number(productDraft.priceNew));
-
+                        await createProductPrice(
+                          created.id,
+                          "DETAIL",
+                          Number(productDraft.priceDetail),
+                        );
+                        await createProductPrice(
+                          created.id,
+                          "WHOLESALE",
+                          Number(productDraft.priceWholesale),
+                        );
+                        await createProductPrice(
+                          created.id,
+                          "NEW",
+                          Number(productDraft.priceNew),
+                        );
 
                         const updated = await listProducts();
                         setProducts(updated);
@@ -1661,10 +2094,22 @@ export default function Sales(): ReactElement {
                           ...prev,
                           lines: [
                             ...prev.lines,
-                            { id: crypto.randomUUID(), productId: created.id, quantity: 1, unitPrice: "" }
-                          ]
+                            {
+                              id: crypto.randomUUID(),
+                              productId: created.id,
+                              quantity: 1,
+                              unitPrice: "",
+                            },
+                          ],
                         }));
-                        setProductDraft({ name: "", description: "", stock: "0", priceDetail: "0", priceWholesale: "0", priceNew: "0" });
+                        setProductDraft({
+                          name: "",
+                          description: "",
+                          stock: "0",
+                          priceDetail: "0",
+                          priceWholesale: "0",
+                          priceNew: "0",
+                        });
                         setShowCreateProductModal(false);
                         setModal({
                           show: true,
@@ -1691,8 +2136,14 @@ export default function Sales(): ReactElement {
               <div className={styles.modal}>
                 <header className={styles.modalHeader}>
                   <h3>Productos</h3>
-                  <button className={styles.button} type="button"
-                    onClick={() => { setShowProductModal(false); setProductModalSearch(""); }}>
+                  <button
+                    className={styles.button}
+                    type="button"
+                    onClick={() => {
+                      setShowProductModal(false);
+                      setProductModalSearch("");
+                    }}
+                  >
                     Cerrar <kbd>Esc</kbd>
                   </button>
                 </header>
@@ -1704,14 +2155,19 @@ export default function Sales(): ReactElement {
                     onChange={(e) => {
                       setProductModalSearch(e.target.value);
                       setProductModalIndex(-1);
-                    }} autoFocus
+                    }}
+                    autoFocus
                     onKeyDown={(e) => {
                       const filtered = products.filter((p) =>
-                        p.name.toLowerCase().includes(productModalSearch.toLowerCase())
+                        p.name
+                          .toLowerCase()
+                          .includes(productModalSearch.toLowerCase()),
                       );
                       if (e.key === "ArrowDown") {
                         e.preventDefault();
-                        setProductModalIndex((prev) => Math.min(prev + 1, filtered.length - 1));
+                        setProductModalIndex((prev) =>
+                          Math.min(prev + 1, filtered.length - 1),
+                        );
                       }
                       if (e.key === "ArrowUp") {
                         e.preventDefault();
@@ -1747,11 +2203,19 @@ export default function Sales(): ReactElement {
                     </thead>
                     <tbody>
                       {products
-                        .filter((p) => p.name.toLowerCase().includes(productModalSearch.toLowerCase()))
+                        .filter((p) =>
+                          p.name
+                            .toLowerCase()
+                            .includes(productModalSearch.toLowerCase()),
+                        )
                         .map((product, index) => (
                           <tr
                             key={product.id}
-                            style={index === productModalIndex ? { background: "#dcfce7", cursor: "pointer" } : { cursor: "pointer" }}
+                            style={
+                              index === productModalIndex
+                                ? { background: "#dcfce7", cursor: "pointer" }
+                                : { cursor: "pointer" }
+                            }
                             onMouseEnter={() => setProductModalIndex(index)}
                             onClick={() => {
                               addProductFromModal(product.id);
@@ -1760,7 +2224,9 @@ export default function Sales(): ReactElement {
                           >
                             <td>{product.name}</td>
                             <td>{product.stock}</td>
-                            <td>₡{Number(product.price).toLocaleString('es-CR')}</td>
+                            <td>
+                              ₡{Number(product.price).toLocaleString("es-CR")}
+                            </td>
                             <td>
                               <button className={styles.button} type="button">
                                 Agregar
@@ -1773,50 +2239,66 @@ export default function Sales(): ReactElement {
                 </div>
               </div>
             </div>
-          )
-          }
+          )}
 
           {viewProduct && (
             <div className={styles.modalBackdrop}>
               <div className={styles.modal}>
                 <header className={styles.modalHeader}>
                   <h3>Detalle del Producto</h3>
-                  <button className={styles.button} type="button"
+                  <button
+                    className={styles.button}
+                    type="button"
                     onClick={() => {
                       setViewProduct(null);
                       setViewProductPrices([]); // 👈
-                    }}>
+                    }}
+                  >
                     Cerrar <kbd>Esc</kbd>
                   </button>
                 </header>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", padding: "0.5rem 0" }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "1rem",
+                    padding: "0.5rem 0",
+                  }}
+                >
                   <div className={styles.field}>
                     <label>Nombre</label>
                     <input value={viewProduct.name} readOnly />
                   </div>
                   <div className={styles.field}>
                     <label>Estado</label>
-                    <input value={viewProduct.status === "ACTIVE" ? "Activo" : "Inactivo"} readOnly disabled={isViewScreen} />
-
+                    <input
+                      value={
+                        viewProduct.status === "ACTIVE" ? "Activo" : "Inactivo"
+                      }
+                      readOnly
+                      disabled={isViewScreen}
+                    />
                   </div>
                   <div className={styles.field}>
                     <label>Stock</label>
                     <input value={viewProduct.stock} readOnly />
                   </div>
                   {viewProduct.description && (
-                    <div className={styles.field} style={{ gridColumn: "span 2" }}>
+                    <div
+                      className={styles.field}
+                      style={{ gridColumn: "span 2" }}
+                    >
                       <label>Descripción</label>
                       <input value={viewProduct.description} readOnly />
                     </div>
-
                   )}
                   <div className={styles.field}>
                     <label>Precio Detalle</label>
                     <input
                       value={
-                        viewProductPrices.find(p => p.type === "DETAIL")
-                          ? `₡${Number(viewProductPrices.find(p => p.type === "DETAIL")?.price).toLocaleString('es-CR')}`
+                        viewProductPrices.find((p) => p.type === "DETAIL")
+                          ? `₡${Number(viewProductPrices.find((p) => p.type === "DETAIL")?.price).toLocaleString("es-CR")}`
                           : "No definido"
                       }
                       readOnly
@@ -1826,8 +2308,8 @@ export default function Sales(): ReactElement {
                     <label>Precio Mayorista</label>
                     <input
                       value={
-                        viewProductPrices.find(p => p.type === "WHOLESALE")
-                          ? `₡${Number(viewProductPrices.find(p => p.type === "WHOLESALE")?.price).toLocaleString('es-CR')}`
+                        viewProductPrices.find((p) => p.type === "WHOLESALE")
+                          ? `₡${Number(viewProductPrices.find((p) => p.type === "WHOLESALE")?.price).toLocaleString("es-CR")}`
                           : "No definido"
                       }
                       readOnly
@@ -1861,23 +2343,28 @@ export default function Sales(): ReactElement {
     );
   }
 
-  const selectedSale = sortedAndFilteredSales.find(s => s.id === selectedRowId);
+  const selectedSale = sortedAndFilteredSales.find(
+    (s) => s.id === selectedRowId,
+  );
 
   return (
-
-    <div style={{
-      background: "#f0f4f0",
-      minHeight: "90vh",
-      display: "flex",
-      justifyContent: "center",
-      alignItems: "flex-start",
-      padding: "1rem"
-    }}>      <section className={styles.container}>
+    <div
+      style={{
+        background: "#f0f4f0",
+        minHeight: "90vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "flex-start",
+        padding: "1rem",
+      }}
+    >
+      {" "}
+      <section className={styles.container}>
         <header className={styles.header}>
           <h2 className={styles.title}>FACTURACIÓN</h2>
           <div className={styles.headerActions}>
-            <span style={{ color: '#9ca3af', fontSize: '0.9rem' }}>
-              {new Date().toLocaleDateString('es-CR')}
+            <span style={{ color: "#9ca3af", fontSize: "0.9rem" }}>
+              {new Date().toLocaleDateString("es-CR")}
             </span>
           </div>
         </header>
@@ -1887,14 +2374,17 @@ export default function Sales(): ReactElement {
         <div className={styles.filters}>
           <div className={styles.field}>
             <label>Ordenar por</label>
-            <select value={sortBy} onChange={(e) => {
-              setSortBy(e.target.value as SortBy);
-              setDateFrom("");
-              setDateTo("");
-              setAmountValue("");        // 👈
-              setClientFilterSearch(""); // 👈
-              setActiveClientId("");     // 👈
-            }}>
+            <select
+              value={sortBy}
+              onChange={(e) => {
+                setSortBy(e.target.value as SortBy);
+                setDateFrom("");
+                setDateTo("");
+                setAmountValue(""); // 👈
+                setClientFilterSearch(""); // 👈
+                setActiveClientId(""); // 👈
+              }}
+            >
               <option value="invoiceNumber">Nro Factura</option>
               <option value="createdAt">Fecha</option>
               <option value="client">Cliente</option>
@@ -1903,14 +2393,20 @@ export default function Sales(): ReactElement {
           </div>
           <div className={styles.field}>
             <label>Dirección</label>
-            <select value={sortDir} onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}>
+            <select
+              value={sortDir}
+              onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}
+            >
               <option value="desc">Descendente</option>
               <option value="asc">Ascendente</option>
             </select>
           </div>
           <div className={styles.field}>
             <label>Estado</label>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            >
               <option value="ALL">Todas</option>
               <option value="PENDING">Pendientes</option>
               <option value="PARTIAL">Parciales</option>
@@ -1946,7 +2442,9 @@ export default function Sales(): ReactElement {
               <div style={{ display: "flex", gap: "0.5rem" }}>
                 <select
                   value={amountOperator}
-                  onChange={(e) => setAmountOperator(e.target.value as ">=" | "<=" | "=")}
+                  onChange={(e) =>
+                    setAmountOperator(e.target.value as ">=" | "<=" | "=")
+                  }
                   style={{ width: "135px" }}
                 >
                   <option value=">=">Mayor o igual</option>
@@ -1980,18 +2478,28 @@ export default function Sales(): ReactElement {
                   setClientFilterDropdownIndex(-1);
                 }}
                 onFocus={() => setShowClientFilterDropdown(true)}
-                onBlur={() => setTimeout(() => setShowClientFilterDropdown(false), 200)}
+                onBlur={() =>
+                  setTimeout(() => setShowClientFilterDropdown(false), 200)
+                }
                 onKeyDown={(e) => {
                   const options = clients
-                    .filter((c) => c.name.toLowerCase().includes(clientFilterSearch.toLowerCase()))
+                    .filter((c) =>
+                      c.name
+                        .toLowerCase()
+                        .includes(clientFilterSearch.toLowerCase()),
+                    )
                     .slice(0, 6);
                   if (e.key === "ArrowDown") {
                     e.preventDefault();
-                    setClientFilterDropdownIndex((prev) => Math.min(prev + 1, options.length - 1));
+                    setClientFilterDropdownIndex((prev) =>
+                      Math.min(prev + 1, options.length - 1),
+                    );
                   }
                   if (e.key === "ArrowUp") {
                     e.preventDefault();
-                    setClientFilterDropdownIndex((prev) => Math.max(prev - 1, 0));
+                    setClientFilterDropdownIndex((prev) =>
+                      Math.max(prev - 1, 0),
+                    );
                   }
                   if (e.key === "Enter" && clientFilterDropdownIndex >= 0) {
                     e.preventDefault();
@@ -2009,13 +2517,21 @@ export default function Sales(): ReactElement {
               {showClientFilterDropdown && clientFilterSearch && (
                 <div className={styles.clientDropdown}>
                   {clients
-                    .filter((c) => c.name.toLowerCase().includes(clientFilterSearch.toLowerCase()))
+                    .filter((c) =>
+                      c.name
+                        .toLowerCase()
+                        .includes(clientFilterSearch.toLowerCase()),
+                    )
                     .slice(0, 6)
                     .map((client, index) => (
                       <div
                         key={client.id}
                         className={styles.clientOption}
-                        style={index === clientFilterDropdownIndex ? { background: "#d1fae5", color: "#16a34a" } : {}}
+                        style={
+                          index === clientFilterDropdownIndex
+                            ? { background: "#d1fae5", color: "#16a34a" }
+                            : {}
+                        }
                         onMouseDown={() => {
                           setClientFilterSearch(client.name);
                           setActiveClientId(client.id);
@@ -2031,36 +2547,42 @@ export default function Sales(): ReactElement {
               )}
             </div>
           )}
-          <button className={styles.primaryButton} type="button" onClick={() => {
-            setActiveSortBy(sortBy);
-            setActiveSortDir(sortDir);
-            setActiveStatusFilter(statusFilter);
-            setActiveDateFrom(dateFrom);
-            setActiveDateTo(dateTo);
-            setActiveAmountOperator(amountOperator);
-            setActiveAmountValue(amountValue);
-          }}>
+          <button
+            className={styles.primaryButton}
+            type="button"
+            onClick={() => {
+              setActiveSortBy(sortBy);
+              setActiveSortDir(sortDir);
+              setActiveStatusFilter(statusFilter);
+              setActiveDateFrom(dateFrom);
+              setActiveDateTo(dateTo);
+              setActiveAmountOperator(amountOperator);
+              setActiveAmountValue(amountValue);
+            }}
+          >
             Buscar
           </button>
-          <button className={styles.button} type="button" onClick={() => {
-            setSortBy("createdAt");
-            setSortDir("desc");
-            setStatusFilter("ALL");
-            setDateFrom("");
-            setDateTo("");
-            setActiveSortBy("createdAt");
-            setActiveSortDir("desc");
-            setActiveStatusFilter("ALL");
-            setActiveDateFrom("");
-            setActiveDateTo("");
-            setActiveAmountOperator(">=");
-            setActiveAmountValue("");
-            setClientSearch("");
-            setClientFilterSearch("");
-            setActiveClientId("");
-
-
-          }}>
+          <button
+            className={styles.button}
+            type="button"
+            onClick={() => {
+              setSortBy("createdAt");
+              setSortDir("desc");
+              setStatusFilter("ALL");
+              setDateFrom("");
+              setDateTo("");
+              setActiveSortBy("createdAt");
+              setActiveSortDir("desc");
+              setActiveStatusFilter("ALL");
+              setActiveDateFrom("");
+              setActiveDateTo("");
+              setActiveAmountOperator(">=");
+              setActiveAmountValue("");
+              setClientSearch("");
+              setClientFilterSearch("");
+              setActiveClientId("");
+            }}
+          >
             Limpiar
           </button>
         </div>
@@ -2078,7 +2600,11 @@ export default function Sales(): ReactElement {
             </thead>
             <tbody>
               {sortedAndFilteredSales.length === 0 ? (
-                <tr><td colSpan={6} className={styles.empty}>No hay ventas registradas.</td></tr>
+                <tr>
+                  <td colSpan={6} className={styles.empty}>
+                    No hay ventas registradas.
+                  </td>
+                </tr>
               ) : (
                 sortedAndFilteredSales.map((sale) => (
                   <tr
@@ -2087,11 +2613,18 @@ export default function Sales(): ReactElement {
                     onClick={() => setSelectedRowId(sale.id)}
                   >
                     <td>{sale.invoiceNumber}</td>
-                    <td>{new Date(sale.createdAt).toLocaleDateString('es-CR')}</td>
-                    <td>{clientsById.get(sale.clientId)?.name ?? sale.clientId}</td>
+                    <td>
+                      {new Date(sale.createdAt).toLocaleDateString("es-CR")}
+                    </td>
+                    <td>
+                      {clientsById.get(sale.clientId)?.name ?? sale.clientId}
+                    </td>
                     <td>{mapPaymentMethod(sale.paymentMethod)}</td>
-                    <td>₡{Number(sale.total).toLocaleString('es-CR')}</td>                  <td>
-                      <span className={`${styles.status} ${styles[sale.status.toLowerCase()]}`}>
+                    <td>₡{Number(sale.total).toLocaleString("es-CR")}</td>{" "}
+                    <td>
+                      <span
+                        className={`${styles.status} ${styles[sale.status.toLowerCase()]}`}
+                      >
                         {mapStatus(sale.status)}
                       </span>
                     </td>
@@ -2104,80 +2637,130 @@ export default function Sales(): ReactElement {
 
         <div className={styles.bottomBar}>
           <div className={styles.bottomActions}>
-            <button className={styles.primaryButton} type="button"
+            <button
+              className={styles.primaryButton}
+              type="button"
               disabled={!caja.abierta}
-              onClick={() => navigate("/sales/new")}>
+              onClick={() => navigate("/sales/new")}
+            >
               <u>C</u>rear
             </button>
 
-            <button className={styles.button} type="button"
+            <button
+              className={styles.button}
+              type="button"
               disabled={!caja.abierta || !selectedRowId}
-              onClick={() => selectedRowId && navigate(`/sales/${selectedRowId}/edit`)}>
+              onClick={() =>
+                selectedRowId && navigate(`/sales/${selectedRowId}/edit`)
+              }
+            >
               M<u>o</u>dificar
             </button>
 
-            <button className={styles.button} type="button"
+            <button
+              className={styles.button}
+              type="button"
               disabled={!caja.abierta || !selectedRowId}
-              onClick={() => selectedRowId && navigate(`/sales/${selectedRowId}/view`)}>
+              onClick={() =>
+                selectedRowId && navigate(`/sales/${selectedRowId}/view`)
+              }
+            >
               <u>V</u>er Factura
             </button>
 
-            <button className={styles.button} type="button"
+            <button
+              className={styles.button}
+              type="button"
               disabled={!caja.abierta || !selectedRowId}
               onClick={() => {
-                const sale = sortedAndFilteredSales.find(s => s.id === selectedRowId);
+                const sale = sortedAndFilteredSales.find(
+                  (s) => s.id === selectedRowId,
+                );
                 if (sale) {
                   setSaleToPrint(sale);
                   setTimeout(() => window.print(), 300);
                 }
-              }}>
+              }}
+            >
               <u>I</u>mprimir
             </button>
-            <button className={styles.button} type="button"
+            <button
+              className={styles.button}
+              type="button"
               disabled={!caja.abierta || !selectedRowId}
               onClick={() => {
-                const sale = sortedAndFilteredSales.find(s => s.id === selectedRowId);
+                const sale = sortedAndFilteredSales.find(
+                  (s) => s.id === selectedRowId,
+                );
                 if (sale) enviarWhatsApp(sale);
-              }}>
+              }}
+            >
               WhatsApp
             </button>
 
-            <button className={styles.dangerButton} type="button"
-              disabled={!caja.abierta || !selectedRowId}
-              onClick={() => selectedRowId && void onDeleteSale(selectedRowId)}>
+            <button
+              className={styles.dangerButton}
+              type="button"
+              disabled={
+                !caja.abierta ||
+                !selectedRowId ||
+                selectedSale?.status === "PAID" ||
+                selectedSale?.status === "PARTIAL"
+              }
+              onClick={() => selectedRowId && void onDeleteSale(selectedRowId)}
+            >
               <u>E</u>liminar
             </button>
 
-            <button className={styles.primaryButton} type="button"
-              disabled={!caja.abierta || !selectedRowId ||
-                (selectedSale?.status !== "PENDING" && selectedSale?.status !== "PARTIAL")}
-              onClick={() => selectedRowId && navigate(`/sales/${selectedRowId}/edit`)}>
+            <button
+              className={styles.primaryButton}
+              type="button"
+              disabled={
+                !caja.abierta ||
+                !selectedRowId ||
+                (selectedSale?.status !== "PENDING" &&
+                  selectedSale?.status !== "PARTIAL")
+              }
+              onClick={() =>
+                selectedRowId && navigate(`/sales/${selectedRowId}/edit`)
+              }
+            >
               Pagar <kbd>Alt+Z</kbd>
             </button>
+            <button
+              className={styles.button}
+              type="button"
+              disabled={!caja.abierta}
+              onClick={() => setShowGastosModal(true)}
+            >
+              Gastos
+            </button>
           </div>
-          <button
-            className={styles.button}
-            type="button"
-            disabled={!caja.abierta}
-            onClick={() => setShowGastosModal(true)}
-          >
-            Gastos
-          </button>
+
           <div className={styles.bottomGlobal}>
-            <button className={styles.primaryButton} type="button"
+            <button
+              className={styles.primaryButton}
+              type="button"
               disabled={caja.abierta}
-              onClick={() => setShowAbrirCajaModal(true)}>
+              onClick={() => setShowAbrirCajaModal(true)}
+            >
               Iniciar Caja <kbd>Alt+K</kbd>
             </button>
 
-            <button className={styles.button} type="button"
+            <button
+              className={styles.button}
+              type="button"
               disabled={!caja.abierta}
-              onClick={cerrarCaja}>
+              onClick={cerrarCaja}
+            >
               Cierre de Caja <kbd>Alt+X</kbd>
             </button>
 
-            <button className={styles.button} type="button"
-              onClick={() => navigate("/dashboard")}>
+            <button
+              className={styles.button}
+              type="button"
+              onClick={() => navigate("/dashboard")}
+            >
               Sali<u>r</u>
             </button>
           </div>
@@ -2199,13 +2782,23 @@ export default function Sales(): ReactElement {
             <div className={styles.modal}>
               <header className={styles.modalHeader}>
                 <h3>Iniciar Caja</h3>
-                <button className={styles.button} type="button" onClick={() => setShowAbrirCajaModal(false)}>
+                <button
+                  className={styles.button}
+                  type="button"
+                  onClick={() => setShowAbrirCajaModal(false)}
+                >
                   Cerrar
                 </button>
               </header>
               <div className={styles.field}>
                 <label>Monto inicial de efectivo</label>
-                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "0.5rem",
+                    alignItems: "center",
+                  }}
+                >
                   <input
                     type="number"
                     min="0"
@@ -2228,16 +2821,34 @@ export default function Sales(): ReactElement {
                     Restablecer
                   </button>
                 </div>
-                <span style={{ fontSize: "0.78rem", color: "#6b7280" }}>Por defecto: ₡30,000</span>
+                <span style={{ fontSize: "0.78rem", color: "#6b7280" }}>
+                  Por defecto: ₡30,000
+                </span>
               </div>
-              <p style={{ color: "#b45309", fontSize: "0.9rem", margin: "0.5rem 0" }}>
+              <p
+                style={{
+                  color: "#b45309",
+                  fontSize: "0.9rem",
+                  margin: "0.5rem 0",
+                }}
+              >
                 ⚠️ Recuerde vaciar la memoria del datáfono antes de iniciar.
               </p>
-              <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-                <button className={styles.primaryButton} type="button" onClick={abrirCaja}>
+              <div
+                style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}
+              >
+                <button
+                  className={styles.primaryButton}
+                  type="button"
+                  onClick={abrirCaja}
+                >
                   Iniciar Caja
                 </button>
-                <button className={styles.button} type="button" onClick={() => setShowAbrirCajaModal(false)}>
+                <button
+                  className={styles.button}
+                  type="button"
+                  onClick={() => setShowAbrirCajaModal(false)}
+                >
                   Cancelar
                 </button>
               </div>
@@ -2251,28 +2862,39 @@ export default function Sales(): ReactElement {
             productsById={productsById}
           />
         )}
-        {cierreToPrint && (
-          <CierreCajaPrint data={cierreToPrint} />
-        )}
+        {cierreToPrint && <CierreCajaPrint data={cierreToPrint} />}
         {showGastosModal && (
           <div className={styles.modalBackdrop}>
             <div className={styles.modal}>
               <header className={styles.modalHeader}>
                 <h3>Gastos del turno</h3>
-                <button className={styles.button} type="button" onClick={() => setShowGastosModal(false)}>
+                <button
+                  className={styles.button}
+                  type="button"
+                  onClick={() => setShowGastosModal(false)}
+                >
                   Cerrar
                 </button>
               </header>
 
-              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
+              <div
+                style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}
+              >
                 <div className={styles.field} style={{ flex: 2 }}>
                   <label>Descripción</label>
                   <input
                     type="text"
                     value={gastoDraft.descripcion}
-                    onChange={(e) => setGastoDraft(prev => ({ ...prev, descripcion: e.target.value }))}
+                    onChange={(e) =>
+                      setGastoDraft((prev) => ({
+                        ...prev,
+                        descripcion: e.target.value,
+                      }))
+                    }
                     placeholder="Ej: Gasolina, almuerzo..."
-                    onKeyDown={(e) => { if (e.key === "Enter") agregarGasto(); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") agregarGasto();
+                    }}
                   />
                 </div>
                 <div className={styles.field} style={{ flex: 1 }}>
@@ -2281,18 +2903,36 @@ export default function Sales(): ReactElement {
                     type="number"
                     min="0"
                     value={gastoDraft.monto}
-                    onChange={(e) => setGastoDraft(prev => ({ ...prev, monto: e.target.value }))}
-                    onKeyDown={(e) => { if (e.key === "Enter") agregarGasto(); }}
+                    onChange={(e) =>
+                      setGastoDraft((prev) => ({
+                        ...prev,
+                        monto: e.target.value,
+                      }))
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") agregarGasto();
+                    }}
                   />
                 </div>
                 <div style={{ display: "flex", alignItems: "flex-end" }}>
-                  <button className={styles.primaryButton} type="button" onClick={agregarGasto}>
+                  <button
+                    className={styles.primaryButton}
+                    type="button"
+                    onClick={agregarGasto}
+                  >
                     Agregar
                   </button>
                 </div>
               </div>
 
-              <div style={{ maxHeight: "300px", overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 8 }}>
+              <div
+                style={{
+                  maxHeight: "300px",
+                  overflowY: "auto",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 8,
+                }}
+              >
                 <table className={styles.table}>
                   <thead>
                     <tr>
@@ -2303,14 +2943,22 @@ export default function Sales(): ReactElement {
                   </thead>
                   <tbody>
                     {caja.gastos.length === 0 ? (
-                      <tr><td colSpan={3} className={styles.empty}>No hay gastos registrados.</td></tr>
+                      <tr>
+                        <td colSpan={3} className={styles.empty}>
+                          No hay gastos registrados.
+                        </td>
+                      </tr>
                     ) : (
                       caja.gastos.map((gasto) => (
                         <tr key={gasto.id}>
                           <td>{gasto.descripcion}</td>
-                          <td>₡{gasto.monto.toLocaleString('es-CR')}</td>
+                          <td>₡{gasto.monto.toLocaleString("es-CR")}</td>
                           <td>
-                            <button className={styles.dangerButton} type="button" onClick={() => eliminarGasto(gasto.id)}>
+                            <button
+                              className={styles.dangerButton}
+                              type="button"
+                              onClick={() => eliminarGasto(gasto.id)}
+                            >
                               Eliminar
                             </button>
                           </td>
@@ -2322,7 +2970,10 @@ export default function Sales(): ReactElement {
               </div>
 
               <p style={{ marginTop: "0.5rem", fontWeight: 600 }}>
-                Total gastos: ₡{caja.gastos.reduce((sum, g) => sum + g.monto, 0).toLocaleString('es-CR')}
+                Total gastos: ₡
+                {caja.gastos
+                  .reduce((sum, g) => sum + g.monto, 0)
+                  .toLocaleString("es-CR")}
               </p>
             </div>
           </div>
@@ -2339,7 +2990,11 @@ export default function Sales(): ReactElement {
             <div className={styles.modal}>
               <header className={styles.modalHeader}>
                 <h3>Enviar por WhatsApp</h3>
-                <button className={styles.button} type="button" onClick={() => setWhatsappModal(null)}>
+                <button
+                  className={styles.button}
+                  type="button"
+                  onClick={() => setWhatsappModal(null)}
+                >
                   Cerrar <kbd>Esc</kbd>
                 </button>
               </header>
@@ -2349,7 +3004,11 @@ export default function Sales(): ReactElement {
                 <input
                   type="text"
                   value={whatsappModal.telefono}
-                  onChange={(e) => setWhatsappModal(prev => prev ? { ...prev, telefono: e.target.value } : null)}
+                  onChange={(e) =>
+                    setWhatsappModal((prev) =>
+                      prev ? { ...prev, telefono: e.target.value } : null,
+                    )
+                  }
                   placeholder="Ej: 88888888"
                 />
               </div>
@@ -2359,16 +3018,36 @@ export default function Sales(): ReactElement {
                 <textarea
                   rows={4}
                   value={whatsappModal.mensaje}
-                  onChange={(e) => setWhatsappModal(prev => prev ? { ...prev, mensaje: e.target.value } : null)}
-                  style={{ resize: "none", border: "1px solid #d1d5db", borderRadius: 8, padding: "0.5rem", font: "inherit" }}
+                  onChange={(e) =>
+                    setWhatsappModal((prev) =>
+                      prev ? { ...prev, mensaje: e.target.value } : null,
+                    )
+                  }
+                  style={{
+                    resize: "none",
+                    border: "1px solid #d1d5db",
+                    borderRadius: 8,
+                    padding: "0.5rem",
+                    font: "inherit",
+                  }}
                 />
               </div>
 
-              <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
-                <button className={styles.primaryButton} type="button" onClick={confirmarEnvioWhatsApp}>
+              <div
+                style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}
+              >
+                <button
+                  className={styles.primaryButton}
+                  type="button"
+                  onClick={confirmarEnvioWhatsApp}
+                >
                   Enviar <kbd>Enter</kbd>
                 </button>
-                <button className={styles.button} type="button" onClick={() => setWhatsappModal(null)}>
+                <button
+                  className={styles.button}
+                  type="button"
+                  onClick={() => setWhatsappModal(null)}
+                >
                   Cancelar
                 </button>
               </div>
@@ -2380,71 +3059,98 @@ export default function Sales(): ReactElement {
   );
 
   function generarExcelCierre(): void {
-    const facturasDeTurno = sales.filter((sale) => caja.facturaIds.includes(sale.id));
+    const facturasDeTurno = sales.filter((sale) =>
+      caja.facturaIds.includes(sale.id),
+    );
 
-    const filas: Record<string, string | number>[] = facturasDeTurno.map((sale) => {
-      const clientName = clientsById.get(sale.clientId)?.name ?? sale.clientId;
-      const efectivo = caja.pagos
-        .filter(p => p.facturaId === sale.id && p.method === "CASH")
-        .reduce((sum, p) => sum + p.amount, 0);
-      const sinpeTransfer = caja.pagos
-        .filter(p => p.facturaId === sale.id && (p.method === "SINPE" || p.method === "TRANSFER"))
-        .reduce((sum, p) => sum + p.amount, 0);
-      const tarjeta = caja.pagos
-        .filter(p => p.facturaId === sale.id && p.method === "CARD")
-        .reduce((sum, p) => sum + p.amount, 0);
+    const filas: Record<string, string | number>[] = facturasDeTurno.map(
+      (sale) => {
+        const clientName =
+          clientsById.get(sale.clientId)?.name ?? sale.clientId;
+        const efectivo = caja.pagos
+          .filter((p) => p.facturaId === sale.id && p.method === "CASH")
+          .reduce((sum, p) => sum + p.amount, 0);
+        const sinpeTransfer = caja.pagos
+          .filter(
+            (p) =>
+              p.facturaId === sale.id &&
+              (p.method === "SINPE" || p.method === "TRANSFER"),
+          )
+          .reduce((sum, p) => sum + p.amount, 0);
+        const tarjeta = caja.pagos
+          .filter((p) => p.facturaId === sale.id && p.method === "CARD")
+          .reduce((sum, p) => sum + p.amount, 0);
 
-      return {
-        "Cliente": clientName,
-        "Efectivo": efectivo || "",
-        "": "",
-        "SINPE/Transferencia": sinpeTransfer || "",
-        "Tarjeta": tarjeta || "",
-      };
-    });
+        return {
+          Cliente: clientName,
+          Efectivo: efectivo || "",
+          "": "",
+          "SINPE/Transferencia": sinpeTransfer || "",
+          Tarjeta: tarjeta || "",
+        };
+      },
+    );
 
     // Fila vacía
-    filas.push({ "Cliente": "", "Efectivo": "", "": "", "SINPE/Transferencia": "", "Tarjeta": "" });
+    filas.push({
+      Cliente: "",
+      Efectivo: "",
+      "": "",
+      "SINPE/Transferencia": "",
+      Tarjeta: "",
+    });
 
     // Total efectivo
     const totalEfectivo = caja.pagos
-      .filter(p => p.method === "CASH")
+      .filter((p) => p.method === "CASH")
       .reduce((sum, p) => sum + p.amount, 0);
 
     filas.push({
-      "Cliente": "TOTAL EFECTIVO",
-      "Efectivo": totalEfectivo,
+      Cliente: "TOTAL EFECTIVO",
+      Efectivo: totalEfectivo,
       "": "",
       "SINPE/Transferencia": "",
-      "Tarjeta": "",
+      Tarjeta: "",
     });
 
     // Fila vacía
-    filas.push({ "Cliente": "", "Efectivo": "", "": "", "SINPE/Transferencia": "", "Tarjeta": "" });
+    filas.push({
+      Cliente: "",
+      Efectivo: "",
+      "": "",
+      "SINPE/Transferencia": "",
+      Tarjeta: "",
+    });
 
     // Gastos
     caja.gastos.forEach((gasto) => {
       filas.push({
-        "Cliente": gasto.descripcion,
-        "Efectivo": -gasto.monto,
+        Cliente: gasto.descripcion,
+        Efectivo: -gasto.monto,
         "": "",
         "SINPE/Transferencia": "",
-        "Tarjeta": "",
+        Tarjeta: "",
       });
     });
 
     // Fila vacía
-    filas.push({ "Cliente": "", "Efectivo": "", "": "", "SINPE/Transferencia": "", "Tarjeta": "" });
+    filas.push({
+      Cliente: "",
+      Efectivo: "",
+      "": "",
+      "SINPE/Transferencia": "",
+      Tarjeta: "",
+    });
 
     // Efectivo neto
     const totalGastos = caja.gastos.reduce((sum, g) => sum + g.monto, 0);
     const efectivoNeto = totalEfectivo - totalGastos;
     filas.push({
-      "Cliente": "EFECTIVO NETO",
-      "Efectivo": efectivoNeto,
+      Cliente: "EFECTIVO NETO",
+      Efectivo: efectivoNeto,
       "": "",
       "SINPE/Transferencia": "",
-      "Tarjeta": "",
+      Tarjeta: "",
     });
 
     const ws = XLSX.utils.json_to_sheet(filas);
@@ -2453,13 +3159,16 @@ export default function Sales(): ReactElement {
     const dataRows = facturasDeTurno.length;
     const totalRow = dataRows + 2; // +1 header +1 fila vacía
     ws[`B${totalRow}`] = {
-      t: 'n',
-      f: `SUM(B2:B${dataRows + 1})`
+      t: "n",
+      f: `SUM(B2:B${dataRows + 1})`,
     };
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Cierre de Caja");
-    XLSX.writeFile(wb, `cierre_caja_${new Date().toLocaleDateString('es-CR').replace(/\//g, '-')}.xlsx`);
+    XLSX.writeFile(
+      wb,
+      `cierre_caja_${new Date().toLocaleDateString("es-CR").replace(/\//g, "-")}.xlsx`,
+    );
   }
 
   function agregarGasto(): void {
@@ -2488,7 +3197,7 @@ export default function Sales(): ReactElement {
   function eliminarGasto(id: string): void {
     const updatedCaja = {
       ...caja,
-      gastos: caja.gastos.filter(g => g.id !== id),
+      gastos: caja.gastos.filter((g) => g.id !== id),
     };
     setCaja(updatedCaja);
     saveCaja(updatedCaja);
@@ -2526,24 +3235,32 @@ export default function Sales(): ReactElement {
 
     setWhatsappModal(null);
 
-    const fecha = new Date(sale.createdAt).toLocaleDateString('es-CR');
-    const hora = new Date(sale.createdAt).toLocaleTimeString('es-CR');
+    const fecha = new Date(sale.createdAt).toLocaleDateString("es-CR");
+    const hora = new Date(sale.createdAt).toLocaleTimeString("es-CR");
     const totalCantidad = sale.details.reduce((sum, d) => sum + d.quantity, 0);
 
-    const detalles = sale.details.map(detail => `
+    const detalles = sale.details
+      .map(
+        (detail) => `
     <tr>
       <td style="text-align:center;padding:2mm 0">${detail.quantity}</td>
       <td style="padding:2mm 5mm">${productsById.get(detail.productId)?.name ?? detail.productName}</td>
-      <td style="text-align:right;padding:2mm 0">₡${Number(detail.subtotal).toLocaleString('es-CR')}</td>
+      <td style="text-align:right;padding:2mm 0">₡${Number(detail.subtotal).toLocaleString("es-CR")}</td>
     </tr>
-  `).join("");
+  `,
+      )
+      .join("");
 
-    const pagos = (sale.payments ?? []).map(payment => `
+    const pagos = (sale.payments ?? [])
+      .map(
+        (payment) => `
     <tr>
       <td>${payment.method === "CASH" ? "Efectivo" : payment.method === "SINPE" ? "SINPE" : payment.method === "TRANSFER" ? "Transferencia" : "Tarjeta"}</td>
-      <td style="text-align:right">₡${Number(payment.amount).toLocaleString('es-CR')}</td>
+      <td style="text-align:right">₡${Number(payment.amount).toLocaleString("es-CR")}</td>
     </tr>
-  `).join("");
+  `,
+      )
+      .join("");
 
     const html = `
     <div style="font-family:Arial,sans-serif;font-size:14px;color:black;padding:20mm;width:216mm;box-sizing:border-box">
@@ -2584,7 +3301,7 @@ export default function Sales(): ReactElement {
         <tbody>
           <tr>
             <td style="font-size:16px"><strong>T O T A L</strong></td>
-            <td style="text-align:right;font-size:16px"><strong>₡${Number(sale.total).toLocaleString('es-CR')}</strong></td>
+            <td style="text-align:right;font-size:16px"><strong>₡${Number(sale.total).toLocaleString("es-CR")}</strong></td>
           </tr>
         </tbody>
       </table>
@@ -2600,18 +3317,20 @@ export default function Sales(): ReactElement {
       .set({
         margin: 0,
         filename: `${client?.name ?? "cliente"}_${sale.invoiceNumber}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
+        image: { type: "jpeg", quality: 0.98 },
         html2canvas: { scale: 2 },
-        jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' }
+        jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
       })
       .from(html)
       .save()
       .then(() => {
         const phoneFormatted = whatsappModal.telefono.replace(/\D/g, "");
-        window.open(`https://wa.me/506${phoneFormatted}?text=${encodeURIComponent(whatsappModal.mensaje)}`, "_blank");
+        window.open(
+          `https://wa.me/506${phoneFormatted}?text=${encodeURIComponent(whatsappModal.mensaje)}`,
+          "_blank",
+        );
       });
   }
-
 }
 
 function mapPaymentMethod(paymentMethod: PaymentMethod): string {

@@ -104,6 +104,11 @@ public class SaleService {
         // 3. Recalcular nueva venta (VALIDA TODO)
         SaleComputation computation = computeSale(request.clientId(),request.items());
 
+        if (request.status() != null) {
+    sale.setStatus(request.status());
+} else {
+    sale.setStatus(Sale.SaleStatus.PENDING);
+}
         // 4. Actualizar datos de la venta
         sale.setUserId(getCurrentUserId());
         sale.setClientId(request.clientId());

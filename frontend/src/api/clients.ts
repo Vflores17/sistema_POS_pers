@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:8080/api/v1";
+import { API_URL, buildHeaders, fetchWithAuth } from "./http";
 
 export type ClientType = "DETAIL" | "WHOLESALE" | "NEW";
 export type ClientStatus = "ACTIVE" | "INACTIVE";
@@ -32,36 +32,12 @@ interface PagedApiResponse<T> {
   message?: string;
 }
 
-function getToken(): string {
-  const token = localStorage.getItem("token");
-  if (!token) {
-    throw new Error("Missing auth token");
-  }
-  return token;
-}
-
-function buildHeaders(includeJson: boolean): HeadersInit {
-  const token = getToken();
-  return includeJson
-    ? {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    }
-    : {
-      Authorization: `Bearer ${token}`,
-    };
-}
-
 export async function listClients(): Promise<Client[]> {
-  const response = await fetch(`${API_URL}/clients`, {
+  const response = await fetchWithAuth(`${API_URL}/clients`, {
     method: "GET",
     headers: buildHeaders(false),
   });
-
-  if (!response.ok) {
-    throw new Error("Failed to load clients");
-  }
-
+  if (!response.ok) throw new Error("Failed to load clients");
   const json = (await response.json()) as PagedApiResponse<Client>;
   return json.data.map((client) => ({
     ...client,
@@ -70,42 +46,31 @@ export async function listClients(): Promise<Client[]> {
 }
 
 export async function createClient(payload: ClientPayload): Promise<Client> {
-  const response = await fetch(`${API_URL}/clients`, {
+  const response = await fetchWithAuth(`${API_URL}/clients`, {
     method: "POST",
     headers: buildHeaders(true),
     body: JSON.stringify(payload),
   });
-
-  if (!response.ok) {
-    throw new Error("Failed to create client");
-  }
-
+  if (!response.ok) throw new Error("Failed to create client");
   const json = (await response.json()) as ApiResponse<Client>;
   return { ...json.data, status: json.data.status ?? "ACTIVE" };
 }
 
 export async function updateClient(id: string, payload: ClientPayload): Promise<Client> {
-  const response = await fetch(`${API_URL}/clients/${id}`, {
+  const response = await fetchWithAuth(`${API_URL}/clients/${id}`, {
     method: "PUT",
     headers: buildHeaders(true),
     body: JSON.stringify(payload),
   });
-
-  if (!response.ok) {
-    throw new Error("Failed to update client");
-  }
-
+  if (!response.ok) throw new Error("Failed to update client");
   const json = (await response.json()) as ApiResponse<Client>;
   return { ...json.data, status: json.data.status ?? "ACTIVE" };
 }
 
 export async function deleteClient(id: string): Promise<void> {
-  const response = await fetch(`${API_URL}/clients/${id}`, {
+  const response = await fetchWithAuth(`${API_URL}/clients/${id}`, {
     method: "DELETE",
     headers: buildHeaders(false),
   });
-
-  if (!response.ok) {
-    throw new Error("Failed to delete client");
-  }
+  if (!response.ok) throw new Error("Failed to delete client");
 }

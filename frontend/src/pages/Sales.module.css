@@ -153,7 +153,9 @@ kbd {
 
 .bottomActions {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+
 }
 
 .bottomGlobal {
@@ -164,10 +166,10 @@ kbd {
 .button {
   border: none;
   border-radius: 8px;
-  padding: 0.5rem 1rem;
+  padding: 0.4rem 0.8rem;
   cursor: pointer;
   font-weight: 600;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   background: #4b5563;
   color: white;
   transition: background 0.2s;

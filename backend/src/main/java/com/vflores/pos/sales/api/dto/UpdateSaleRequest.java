@@ -15,6 +15,8 @@ public record UpdateSaleRequest(
         Sale.PaymentMethod paymentMethod,
 
         @NotEmpty
-        List<@Valid SaleItemRequest> items
+        List<@Valid SaleItemRequest> items,
+
+        Sale.SaleStatus status
 ) {
 }
