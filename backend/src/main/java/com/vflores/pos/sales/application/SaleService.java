@@ -35,6 +35,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.Comparator;
 
 @Service
 @RequiredArgsConstructor
@@ -79,6 +80,7 @@ public class SaleService {
                 .total(computation.total())
                 .status(Sale.SaleStatus.PENDING)
                 .details(new ArrayList<>())
+                .comments(request.comments())
                 .build();
 
         sale.getDetails().addAll(buildSaleDetails(sale, computation.lines()));
@@ -114,6 +116,7 @@ public class SaleService {
         sale.setClientId(request.clientId());
         sale.setPaymentMethod(request.paymentMethod() == null ? Sale.PaymentMethod.CASH : request.paymentMethod());
         sale.setTotal(computation.total());
+        sale.setComments(request.comments());
 
         // 5. Limpiar y reconstruir detalles
         sale.getDetails().clear();
@@ -152,8 +155,7 @@ public class SaleService {
             case NEW -> priceType = ProductPriceType.NEW; // 👈
             default -> throw new IllegalStateException("Unknown client type: " + clientType);
         }
-        Map<UUID, Integer> requestedQuantities = aggregateRequestedQuantities(items);
-        Set<UUID> productIds = requestedQuantities.keySet();
+Map<UUID, BigDecimal> requestedQuantities = aggregateRequestedQuantities(items);        Set<UUID> productIds = requestedQuantities.keySet();
 
         Map<UUID, Product> productsById = productRepository.findAllById(productIds)
                 .stream()
@@ -187,23 +189,14 @@ public class SaleService {
                 throw new ConflictException("Product price is null: " + product.getName());
             }
 
-            BigDecimal subtotal = price.multiply(BigDecimal.valueOf(item.quantity()));
-            lines.add(new SaleLineData(product, item.quantity(), price, subtotal));
+BigDecimal subtotal = price.multiply(item.quantity());            lines.add(new SaleLineData(product, item.quantity(), price, subtotal));
             total = total.add(subtotal);
         }
 
         return new SaleComputation(requestedQuantities, productsById, lines, total);
     }
 
-    private Map<UUID, Integer> aggregateRequestedQuantities(List<SaleItemRequest> items) {
-        Map<UUID, Integer> requestedQuantities = new LinkedHashMap<>();
-        for (SaleItemRequest item : items) {
-            requestedQuantities.merge(item.productId(), item.quantity(), Integer::sum);
-        }
-        return requestedQuantities;
-    }
-
-    private void validateStockAvailability(Map<UUID, Integer> requested, Map<UUID, Product> productsById) {
+        private void validateStockAvailability(Map<UUID, Integer> requested, Map<UUID, Product> productsById) {
         for (Map.Entry<UUID, Integer> entry : requested.entrySet()) {
             Product product = productsById.get(entry.getKey());
             Integer requiredQuantity = entry.getValue();
@@ -217,51 +210,55 @@ public class SaleService {
         }
     }
 
-    private void applyStockDelta(Map<UUID, Integer> quantities, Map<UUID, Product> productsById, int multiplier) {
-        for (Map.Entry<UUID, Integer> entry : quantities.entrySet()) {
-            Product product = productsById.get(entry.getKey());
-            int newStock = product.getStock() + (entry.getValue() * multiplier);
-            product.setStock(newStock);
-        }
+    private void applyStockDelta(Map<UUID, BigDecimal> quantities, Map<UUID, Product> productsById, int multiplier) {
+    for (Map.Entry<UUID, BigDecimal> entry : quantities.entrySet()) {
+        Product product = productsById.get(entry.getKey());
+        BigDecimal delta = entry.getValue().multiply(BigDecimal.valueOf(multiplier));
+        int newStock = product.getStock() + delta.intValue();
+        product.setStock(newStock);
     }
+}
 
     private void restoreStockFromDetails(List<SaleDetail> details) {
-        Map<UUID, Integer> soldQuantities = new LinkedHashMap<>();
-        Map<UUID, Product> productsById = new LinkedHashMap<>();
+    Map<UUID, BigDecimal> soldQuantities = new LinkedHashMap<>();
+    Map<UUID, Product> productsById = new LinkedHashMap<>();
 
-        for (SaleDetail detail : details) {
-            UUID productId = detail.getProduct().getId();
-            soldQuantities.merge(productId, detail.getQuantity(), Integer::sum);
-            productsById.put(productId, detail.getProduct());
-        }
-
-        applyStockDelta(soldQuantities, productsById, 1);
+    for (SaleDetail detail : details) {
+        UUID productId = detail.getProduct().getId();
+        soldQuantities.merge(productId, detail.getQuantity(), BigDecimal::add);
+        productsById.put(productId, detail.getProduct());
     }
+
+    applyStockDelta(soldQuantities, productsById, 1);
+}
 
     private List<SaleDetail> buildSaleDetails(Sale sale, List<SaleLineData> lines) {
-        List<SaleDetail> details = new ArrayList<>();
-        for (SaleLineData line : lines) {
-            details.add(SaleDetail.builder()
-                    .sale(sale)
-                    .product(line.product())
-                    .quantity(line.quantity())
-                    .price(line.price())
-                    .subtotal(line.subtotal())
-                    .build());
-        }
-        return details;
+    List<SaleDetail> details = new ArrayList<>();
+    for (int i = 0; i < lines.size(); i++) {
+        SaleLineData line = lines.get(i);
+        details.add(SaleDetail.builder()
+                .sale(sale)
+                .product(line.product())
+                .quantity(line.quantity())
+                .price(line.price())
+                .subtotal(line.subtotal())
+                .sortOrder(i)  // 👈 agregar
+                .build());
     }
+    return details;
+}
 
     private SaleResponse toResponse(Sale sale) {
         List<SaleDetailResponse> details = sale.getDetails().stream()
-                .map(detail -> new SaleDetailResponse(
-                        detail.getProduct().getId(),
-                        detail.getProduct().getName(),
-                        detail.getQuantity(),
-                        detail.getPrice(),
-                        detail.getSubtotal()
-                ))
-                .toList();
+        .sorted(Comparator.comparingInt(SaleDetail::getSortOrder))  // 👈 agregar
+        .map(detail -> new SaleDetailResponse(
+                detail.getProduct().getId(),
+                detail.getProduct().getName(),
+                detail.getQuantity(),
+                detail.getPrice(),
+                detail.getSubtotal()
+        ))
+        .toList();
 
         return new SaleResponse(
                 sale.getId(),
@@ -273,25 +270,35 @@ public class SaleService {
                 sale.getStatus(),
                 sale.getCreatedAt(),
                 details,
-                mapPayments(sale.getPayments())
+                mapPayments(sale.getPayments()),
+                sale.getComments()
         );
     }
 
     private record SaleLineData(
             Product product,
-            Integer quantity,
+             BigDecimal quantity, 
             BigDecimal price,
             BigDecimal subtotal
     ) {
     }
 
     private record SaleComputation(
-            Map<UUID, Integer> quantityByProduct,
+            Map<UUID, BigDecimal> quantityByProduct,
             Map<UUID, Product> productsById,
             List<SaleLineData> lines,
             BigDecimal total
     ) {
     }
+
+    private Map<UUID, BigDecimal> aggregateRequestedQuantities(List<SaleItemRequest> items) {
+    Map<UUID, BigDecimal> requestedQuantities = new LinkedHashMap<>();
+    for (SaleItemRequest item : items) {
+        requestedQuantities.merge(item.productId(), item.quantity(), BigDecimal::add);
+    }
+    return requestedQuantities;
+}
+
 
     @Transactional
     public SaleResponse updateStatus(UUID saleId, Sale.SaleStatus newStatus) {
@@ -323,7 +330,8 @@ public class SaleService {
             saved.getStatus(),
             saved.getCreatedAt(),
             mapDetails(saved.getDetails()),
-            mapPayments(saved.getPayments())
+            mapPayments(saved.getPayments()),
+            saved.getComments()
         );
     }
 

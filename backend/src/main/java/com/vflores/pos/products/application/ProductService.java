@@ -14,7 +14,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.vflores.pos.products.domain.repository.ProductPriceRepository;
 import java.util.UUID;
 
 @Service
@@ -22,6 +22,7 @@ import java.util.UUID;
 public class ProductService {
 
     private final ProductRepository productRepository;
+    private final ProductPriceRepository productPriceRepository;
 
     @Transactional(readOnly = true)
     public Page<ProductResponse> findAll(String search, ProductStatus status, Pageable pageable) {
@@ -82,6 +83,7 @@ public class ProductService {
         if (!productRepository.existsById(id)) {
             throw new ResourceNotFoundException("Product not found: " + id);
         }
+        productPriceRepository.deleteByProductId(id);
         productRepository.deleteById(id);
     }
 

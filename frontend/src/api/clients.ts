@@ -33,7 +33,7 @@ interface PagedApiResponse<T> {
 }
 
 export async function listClients(): Promise<Client[]> {
-  const response = await fetchWithAuth(`${API_URL}/clients`, {
+  const response = await fetchWithAuth(`${API_URL}/clients?all=true`, {
     method: "GET",
     headers: buildHeaders(false),
   });

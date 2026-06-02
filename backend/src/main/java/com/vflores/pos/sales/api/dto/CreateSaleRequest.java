@@ -14,6 +14,9 @@ public record CreateSaleRequest(
         Sale.PaymentMethod paymentMethod,
 
         @NotEmpty
-        List<@Valid SaleItemRequest> items
+        List<@Valid SaleItemRequest> items,
+
+        String comments,      
+        Sale.SaleStatus status    
 ) {
 }

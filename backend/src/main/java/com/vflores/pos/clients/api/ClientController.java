@@ -43,9 +43,14 @@ public class ClientController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "createdAt,desc") String sort,
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) ClientType type
+            @RequestParam(required = false) ClientType type,
+            @RequestParam(defaultValue = "false") boolean all
     ) {
-        Pageable pageable = toPageable(page, size, sort);
+        // Si all=true, traer todos los registros sin límite de paginación
+        Pageable pageable = all
+                ? PageRequest.of(0, Integer.MAX_VALUE, Sort.by(Sort.Direction.ASC, "name"))
+                : toPageable(page, size, sort);
+
         Page<ClientResponse> clients = clientService.findAll(search, type, pageable);
         PageMeta meta = new PageMeta(
                 clients.getNumber(),

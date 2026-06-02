@@ -6,12 +6,15 @@ export type SaleStatus = "PENDING" | "PARTIAL" | "PAID" | "CANCELLED";
 export interface SaleItemPayload {
   productId: string;
   quantity: number;
+  price?: number;
 }
 
 export interface CreateSalePayload {
   clientId: string;
   paymentMethod: PaymentMethod;
   items: SaleItemPayload[];
+  status?: string;
+  comments?: string;
 }
 
 export type UpdateSalePayload = CreateSalePayload;
@@ -35,6 +38,7 @@ export interface Sale {
   createdAt: string;
   details: SaleDetail[];
   payments: SalePayment[];
+  comments?: string;
 }
 
 export interface SalePayment {

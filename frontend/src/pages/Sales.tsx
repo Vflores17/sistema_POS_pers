@@ -223,6 +223,32 @@ export default function Sales(): ReactElement {
     gastos: { descripcion: string; monto: number }[]; // 👈
   } | null>(null);
 
+  const [showComments, setShowComments] = useState<boolean>(false);
+
+  const [activeDateFrom, setActiveDateFrom] = useState<string>("");
+  const [activeDateTo, setActiveDateTo] = useState<string>("");
+  const [activeSortBy, setActiveSortBy] = useState<SortBy>("createdAt");
+  const [activeSortDir, setActiveSortDir] = useState<"asc" | "desc">("desc");
+  const [activeStatusFilter, setActiveStatusFilter] =
+    useState<StatusFilter>("ALL");
+  const [amountOperator, setAmountOperator] = useState<">=" | "<=" | "=">(">=");
+  const [amountValue, setAmountValue] = useState<string>("");
+  const [activeAmountOperator, setActiveAmountOperator] = useState<
+    ">=" | "<=" | "="
+  >(">=");
+  const [activeAmountValue, setActiveAmountValue] = useState<string>("");
+  const [clientFilterSearch, setClientFilterSearch] = useState<string>("");
+  const [activeClientId, setActiveClientId] = useState<string>("");
+  const [showClientFilterDropdown, setShowClientFilterDropdown] =
+    useState<boolean>(false);
+  const [clientFilterDropdownIndex, setClientFilterDropdownIndex] =
+    useState<number>(-1);
+
+  const clientsById = useMemo(() => {
+    return new Map(clients.map((client) => [client.id, client]));
+  }, [clients]);
+
+
   function abrirCaja(): void {
     if (!montoInicialDraft) {
       setModal({
@@ -556,7 +582,68 @@ export default function Sales(): ReactElement {
     void bootstrap();
   }, [isFormScreen, isEditScreen, id]);
 
-  // 👈 aquí
+  const sortedAndFilteredSales = useMemo(() => {
+    let result = sales;
+    if (activeStatusFilter !== "ALL") {
+      result = result.filter((sale) => sale.status === activeStatusFilter);
+    }
+    if (activeDateFrom) {
+      result = result.filter((sale) => {
+        const saleDateCR = new Date(
+          new Date(sale.createdAt).getTime() - 6 * 60 * 60 * 1000,
+        );
+        return saleDateCR.toISOString().slice(0, 10) >= activeDateFrom;
+      });
+    }
+    if (activeDateTo) {
+      result = result.filter((sale) => {
+        const saleDateCR = new Date(
+          new Date(sale.createdAt).getTime() - 6 * 60 * 60 * 1000,
+        );
+        return saleDateCR.toISOString().slice(0, 10) <= activeDateTo;
+      });
+    }
+    if (activeAmountValue) {
+      const amount = Number(activeAmountValue);
+      result = result.filter((sale) => {
+        const total = Number(sale.total);
+        if (activeAmountOperator === ">=") return total >= amount;
+        if (activeAmountOperator === "<=") return total <= amount;
+        return total === amount;
+      });
+    }
+    if (activeClientId) {
+      result = result.filter((sale) => sale.clientId === activeClientId);
+    }
+    return [...result].sort((a, b) => {
+      let comparison = 0;
+      if (activeSortBy === "invoiceNumber") {
+        comparison = a.invoiceNumber - b.invoiceNumber;
+      } else if (activeSortBy === "createdAt") {
+        comparison =
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      } else if (activeSortBy === "total") {
+        comparison = Number(a.total) - Number(b.total);
+      } else {
+        const aClient = clientsById.get(a.clientId)?.name ?? "";
+        const bClient = clientsById.get(b.clientId)?.name ?? "";
+        comparison = aClient.localeCompare(bClient);
+      }
+      return activeSortDir === "asc" ? comparison : -comparison;
+    });
+  }, [
+    sales,
+    activeSortBy,
+    activeSortDir,
+    activeStatusFilter,
+    clientsById,
+    activeDateFrom,
+    activeDateTo,
+    activeAmountOperator,
+    activeAmountValue,
+    activeClientId,
+  ]);
+
   useEffect(() => {
     if (isFormScreen) return;
 
@@ -623,11 +710,27 @@ export default function Sales(): ReactElement {
         e.preventDefault();
         if (caja.abierta) cerrarCaja();
       }
+
+      if (e.key === "ArrowDown") {
+  e.preventDefault();
+  const currentIndex = sortedAndFilteredSales.findIndex(s => s.id === selectedRowId);
+  const nextIndex = Math.min(currentIndex + 1, sortedAndFilteredSales.length - 1);
+  setSelectedRowId(sortedAndFilteredSales[nextIndex]?.id ?? "");
+}
+if (e.key === "ArrowUp") {
+  e.preventDefault();
+  const currentIndex = sortedAndFilteredSales.findIndex(
+    (s) => s.id === selectedRowId,
+  );
+  const prevIndex = Math.max(currentIndex - 1, 0);
+  setSelectedRowId(sortedAndFilteredSales[prevIndex]?.id ?? "");
+}
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isFormScreen, modal.show, selectedRowId, caja, navigate]);
+    
+  }, [isFormScreen, modal.show, selectedRowId, caja, navigate, sortedAndFilteredSales]);
 
   useEffect(() => {
     if (!selectedRowRef.current) return;
@@ -660,6 +763,28 @@ export default function Sales(): ReactElement {
     }
   }, [selectedRowId, saleDraft.lines]);
 
+  useEffect(() => {
+  if (isFormScreen) return;
+  if (!selectedRowId) return;
+
+  const container = document.querySelector(`.${styles.tableContainer}`) as HTMLElement;
+  if (!container) return;
+
+  const selectedRow = container.querySelector(`tr.${styles.selected}`) as HTMLElement;
+  if (!selectedRow) return;
+
+  const rowTop = selectedRow.offsetTop;
+  const rowBottom = rowTop + selectedRow.offsetHeight;
+  const containerTop = container.scrollTop;
+  const containerBottom = container.scrollTop + container.clientHeight;
+
+  if (rowTop < containerTop) {
+    container.scrollTop = rowTop;
+  } else if (rowBottom > containerBottom) {
+    container.scrollTop = rowBottom - container.clientHeight;
+  }
+}, [selectedRowId, isFormScreen]);
+
   const sessionUserLabel = useMemo(() => {
     const token = localStorage.getItem("token");
     if (!token) return "Usuario de sesión";
@@ -681,9 +806,7 @@ export default function Sales(): ReactElement {
     activeElement === "select" ||
     activeElement === "textarea";
 
-  const clientsById = useMemo(() => {
-    return new Map(clients.map((client) => [client.id, client]));
-  }, [clients]);
+  
 
   const filteredClientOptions = useMemo(() => {
     const term = clientSearch.trim().toLowerCase();
@@ -770,87 +893,7 @@ export default function Sales(): ReactElement {
     return "PAID";
   }, [paymentTotal, calculatedTotal, saleDraft.status]);
 
-  const [activeDateFrom, setActiveDateFrom] = useState<string>("");
-  const [activeDateTo, setActiveDateTo] = useState<string>("");
-  const [activeSortBy, setActiveSortBy] = useState<SortBy>("createdAt");
-  const [activeSortDir, setActiveSortDir] = useState<"asc" | "desc">("desc");
-  const [activeStatusFilter, setActiveStatusFilter] =
-    useState<StatusFilter>("ALL");
-  const [amountOperator, setAmountOperator] = useState<">=" | "<=" | "=">(">=");
-  const [amountValue, setAmountValue] = useState<string>("");
-  const [activeAmountOperator, setActiveAmountOperator] = useState<
-    ">=" | "<=" | "="
-  >(">=");
-  const [activeAmountValue, setActiveAmountValue] = useState<string>("");
-  const [clientFilterSearch, setClientFilterSearch] = useState<string>("");
-  const [activeClientId, setActiveClientId] = useState<string>("");
-  const [showClientFilterDropdown, setShowClientFilterDropdown] =
-    useState<boolean>(false);
-  const [clientFilterDropdownIndex, setClientFilterDropdownIndex] =
-    useState<number>(-1);
-
-  const sortedAndFilteredSales = useMemo(() => {
-    let result = sales;
-    if (activeStatusFilter !== "ALL") {
-      result = result.filter((sale) => sale.status === activeStatusFilter);
-    }
-    if (activeDateFrom) {
-      result = result.filter((sale) => {
-        const saleDateCR = new Date(
-          new Date(sale.createdAt).getTime() - 6 * 60 * 60 * 1000,
-        );
-        return saleDateCR.toISOString().slice(0, 10) >= activeDateFrom;
-      });
-    }
-    if (activeDateTo) {
-      result = result.filter((sale) => {
-        const saleDateCR = new Date(
-          new Date(sale.createdAt).getTime() - 6 * 60 * 60 * 1000,
-        );
-        return saleDateCR.toISOString().slice(0, 10) <= activeDateTo;
-      });
-    }
-    if (activeAmountValue) {
-      const amount = Number(activeAmountValue);
-      result = result.filter((sale) => {
-        const total = Number(sale.total);
-        if (activeAmountOperator === ">=") return total >= amount;
-        if (activeAmountOperator === "<=") return total <= amount;
-        return total === amount;
-      });
-    }
-    if (activeClientId) {
-      result = result.filter((sale) => sale.clientId === activeClientId);
-    }
-    return [...result].sort((a, b) => {
-      let comparison = 0;
-      if (activeSortBy === "invoiceNumber") {
-        comparison = a.invoiceNumber - b.invoiceNumber;
-      } else if (activeSortBy === "createdAt") {
-        comparison =
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      } else if (activeSortBy === "total") {
-        comparison = Number(a.total) - Number(b.total);
-      } else {
-        const aClient = clientsById.get(a.clientId)?.name ?? "";
-        const bClient = clientsById.get(b.clientId)?.name ?? "";
-        comparison = aClient.localeCompare(bClient);
-      }
-      return activeSortDir === "asc" ? comparison : -comparison;
-    });
-  }, [
-    sales,
-    activeSortBy,
-    activeSortDir,
-    activeStatusFilter,
-    clientsById,
-    activeDateFrom,
-    activeDateTo,
-    activeAmountOperator,
-    activeAmountValue,
-    activeClientId,
-  ]);
-
+  
   const [dropdownPosition, setDropdownPosition] = useState<{
     top: number;
     left: number;
@@ -895,9 +938,12 @@ export default function Sales(): ReactElement {
               quantity: detail.quantity,
               unitPrice: String(detail.price),
             })),
-            comments: "",
+            comments: sale.comments ?? "",
             status: sale.status,
           });
+          if (sale.comments) {
+  setShowComments(true);
+}
           const clientName =
             baseData[0].find((c) => c.id === sale.clientId)?.name ?? "";
           setClientSearch(clientName);
@@ -1069,7 +1115,7 @@ export default function Sales(): ReactElement {
       return;
     }
 
-    let unitPrice = "";
+      let unitPrice = "";
     try {
       unitPrice = await resolveUnitPrice(productId, saleDraft.clientId);
     } catch {
@@ -1094,6 +1140,7 @@ export default function Sales(): ReactElement {
     });
     setShowProductModal(false);
     setProductModalIndex(-1);
+    setProductModalSearch("");
   }
 
   async function onSave(printAfterSave: boolean): Promise<void> {
@@ -1175,6 +1222,7 @@ export default function Sales(): ReactElement {
           price: line.unitPrice !== "" ? Number(line.unitPrice) : undefined,
         })),
         status: calculatedStatus,
+        comments: saleDraft.comments,
       };
       const saved =
         isEditScreen && id
@@ -1221,16 +1269,17 @@ export default function Sales(): ReactElement {
         }
       }
       if (paymentsPayload.length > 0) {
-        await savePayments(saved.id, paymentsPayload);
-      }
-      if (!isEditScreen && saleDraft.status && saleDraft.status !== "PENDING") {
-        await changeSaleStatus(saved.id, saleDraft.status);
-      }
+  await savePayments(saved.id, paymentsPayload);
+}
+if (!isEditScreen && saleDraft.status && saleDraft.status !== "PENDING") {
+  await changeSaleStatus(saved.id, saleDraft.status);
+}
 
-      if (printAfterSave) {
-        setSaleToPrint(saved);
-        setTimeout(() => window.print(), 300);
-      }
+if (printAfterSave) {
+  const saleToprint = await getSaleById(saved.id);
+  setSaleToPrint(saleToprint);
+  setTimeout(() => window.print(), 300);
+}
       // Resetear formulario para nueva factura
       const next = await getNextInvoiceNumber();
       setInvoiceNumber(next);
@@ -1299,11 +1348,13 @@ export default function Sales(): ReactElement {
       <div
         style={{
           background: "#f0f4f0",
-          minHeight: "90vh",
+          height: "100vh",
           display: "flex",
           justifyContent: "center",
           alignItems: "flex-start",
-          padding: "1rem",
+          padding: "0.5rem",
+          overflow: "hidden",
+          boxSizing: "border-box",
         }}
       >
         {" "}
@@ -1415,17 +1466,8 @@ export default function Sales(): ReactElement {
                 </div>
               </div>
               <div className={styles.field} style={{ gridColumn: "span 2" }}>
-                <label>
-                  Método de <u>P</u>ago
-                </label>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(4, 1fr)",
-                    gap: "0.5rem",
-                    marginTop: "0.25rem",
-                  }}
-                >
+                <label>Método de Pago</label>
+                <div className={styles.paymentsRow}>
                   {[
                     { key: "CASH" as PaymentMethod, label: "Efectivo" },
                     { key: "SINPE" as PaymentMethod, label: "SINPE" },
@@ -1435,19 +1477,12 @@ export default function Sales(): ReactElement {
                     },
                     { key: "CARD" as PaymentMethod, label: "Tarjeta" },
                   ].map((item) => (
-                    <div
-                      key={item.key}
-                      style={{
-                        border: "1px solid #e5e7eb",
-                        borderRadius: 8,
-                        padding: "0.5rem",
-                      }}
-                    >
+                    <div key={item.key} className={styles.paymentItem}>
                       <label
                         style={{
                           display: "flex",
                           alignItems: "center",
-                          gap: "0.4rem",
+                          gap: "0.3rem",
                           cursor: "pointer",
                         }}
                       >
@@ -1457,9 +1492,13 @@ export default function Sales(): ReactElement {
                           onChange={(event) =>
                             onPaymentToggle(item.key, event.target.checked)
                           }
-                          disabled={isViewScreen} // 👈
+                          disabled={isViewScreen}
                         />
-                        {item.label}
+                        <span
+                          style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}
+                        >
+                          {item.label}
+                        </span>
                       </label>
                       {paymentDraft[item.key].enabled && (
                         <input
@@ -1471,39 +1510,12 @@ export default function Sales(): ReactElement {
                           onChange={(e) =>
                             onPaymentAmountChange(item.key, e.target.value)
                           }
-                          style={{ width: "100%", marginTop: "0.25rem" }}
                           disabled={isViewScreen}
                         />
                       )}
                     </div>
                   ))}
-                </div>
-                <div
-                  style={{
-                    marginTop: "0.5rem",
-                    fontSize: "0.9rem",
-                    color: "#4b5563",
-                  }}
-                >
-                  Suma pagos: ₡{paymentTotal.toLocaleString("es-CR")} / Total: ₡
-                  {calculatedTotal.toLocaleString("es-CR")}
-                  {paymentTotal > 0 && paymentTotal < calculatedTotal && (
-                    <span style={{ color: "#b45309", marginLeft: "0.5rem" }}>
-                      ⚠️ Faltante: ₡
-                      {(calculatedTotal - paymentTotal).toLocaleString("es-CR")}
-                    </span>
-                  )}
-                  {paymentTotal > calculatedTotal && (
-                    <span style={{ color: "#dc2626", marginLeft: "0.5rem" }}>
-                      ❌ Excedente: ₡
-                      {(paymentTotal - calculatedTotal).toLocaleString("es-CR")}
-                    </span>
-                  )}
-                  {paymentTotal > 0 && paymentTotal === calculatedTotal && (
-                    <span style={{ color: "#16a34a", marginLeft: "0.5rem" }}>
-                      ✅ Pago completo
-                    </span>
-                  )}
+                  
                 </div>
               </div>
               <div className={styles.field}>
@@ -1511,31 +1523,46 @@ export default function Sales(): ReactElement {
                 <input value={sessionUserLabel} readOnly />
               </div>
               <div className={styles.field}>
-                <label>Estado</label>
-                <select
-                  value={
-                    calculatedStatus === "CANCELLED"
-                      ? "CANCELLED"
-                      : saleDraft.status === "CANCELLED"
-                        ? "CANCELLED"
-                        : calculatedStatus
-                  }
-                  disabled={
-                    !isEditScreen ||
-                    (saleDraft.status !== "PENDING" &&
-                      saleDraft.status !== "PARTIAL")
-                  }
-                  onChange={async (e) => {
-                    const newStatus = e.target.value as SaleStatus;
-                    setSaleDraft((prev) => ({ ...prev, status: newStatus }));
-                  }}
-                >
-                  <option value="PENDING">Pendiente</option>
-                  <option value="PARTIAL">Parcial</option>
-                  <option value="PAID">Pagada</option>
-                  <option value="CANCELLED">Cancelada</option>
-                </select>
-              </div>
+  <label>Estado</label>
+  <div style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem" }}>
+    <select
+      value={
+        calculatedStatus === "CANCELLED"
+          ? "CANCELLED"
+          : saleDraft.status === "CANCELLED"
+            ? "CANCELLED"
+            : calculatedStatus
+      }
+      disabled={
+        !isEditScreen ||
+        (saleDraft.status !== "PENDING" &&
+          saleDraft.status !== "PARTIAL")
+      }
+      onChange={async (e) => {
+        const newStatus = e.target.value as SaleStatus;
+        setSaleDraft((prev) => ({ ...prev, status: newStatus }));
+      }}
+    >
+      <option value="PENDING">Pendiente</option>
+      <option value="PARTIAL">Parcial</option>
+      <option value="PAID">Pagada</option>
+      <option value="CANCELLED">Cancelada</option>
+    </select>
+    <div style={{ fontSize: "0.78rem", color: "#4b5563", lineHeight: 1.4 }}>
+      <div>Suma: ₡{paymentTotal.toLocaleString("es-CR")}</div>
+      <div>Total: ₡{calculatedTotal.toLocaleString("es-CR")}</div>
+      {paymentTotal > 0 && paymentTotal < calculatedTotal && (
+        <div style={{ color: "#b45309" }}>⚠️ ₡{(calculatedTotal - paymentTotal).toLocaleString("es-CR")}</div>
+      )}
+      {paymentTotal > calculatedTotal && (
+        <div style={{ color: "#dc2626" }}>❌ ₡{(paymentTotal - calculatedTotal).toLocaleString("es-CR")}</div>
+      )}
+      {paymentTotal > 0 && paymentTotal === calculatedTotal && (
+        <div style={{ color: "#16a34a" }}>✅ Completo</div>
+      )}
+    </div>
+  </div>
+</div>
             </div>
             {!isViewScreen && (
               <div className={styles.menuBar}>
@@ -1887,12 +1914,23 @@ export default function Sales(): ReactElement {
               </table>
             </div>
             <div className={styles.commentsWrap}>
-              <label>Comentarios (solo impresión)</label>
-              <textarea
-                value={saleDraft.comments}
-                onChange={onCommentChange}
-                rows={3}
-              />
+              <button
+                className={styles.commentsToggle}
+                type="button"
+                onClick={() => setShowComments((prev) => !prev)}
+              >
+                {showComments
+                  ? "▲ Ocultar comentarios"
+                  : "▼ Comentarios (solo impresión)"}
+              </button>
+              {showComments && (
+                <textarea
+                  value={saleDraft.comments}
+                  onChange={onCommentChange}
+                  rows={2}
+                  style={{ marginTop: "0.4rem" }}
+                />
+              )}
             </div>
           </div>
 
@@ -2351,11 +2389,13 @@ export default function Sales(): ReactElement {
     <div
       style={{
         background: "#f0f4f0",
-        minHeight: "90vh",
+        height: "100vh",
         display: "flex",
         justifyContent: "center",
         alignItems: "flex-start",
-        padding: "1rem",
+        padding: "0.5rem",
+        overflow: "hidden",
+        boxSizing: "border-box",
       }}
     >
       {" "}

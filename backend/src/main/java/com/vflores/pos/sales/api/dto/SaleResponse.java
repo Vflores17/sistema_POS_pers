@@ -16,6 +16,7 @@ public record SaleResponse(
         Sale.SaleStatus status,
         OffsetDateTime createdAt,
         List<SaleDetailResponse> details,
-        List<SalePaymentResponse> payments
+        List<SalePaymentResponse> payments,
+         String comments
 ) {
 }

@@ -42,12 +42,16 @@ public class RouteSaleDetail {
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
-    @Column(name = "quantity", nullable = false)
-    private Integer quantity;
-
+ @Column(name = "quantity", nullable = false, precision = 14, scale = 3)
+private BigDecimal quantity;
+   
     @Column(name = "price", nullable = false, precision = 14, scale = 2)
     private BigDecimal price;
 
     @Column(name = "subtotal", nullable = false, precision = 14, scale = 2)
     private BigDecimal subtotal;
+
+    @Column(name = "sort_order", nullable = false)
+@Builder.Default
+private Integer sortOrder = 0;
 }

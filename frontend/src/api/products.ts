@@ -33,9 +33,8 @@ interface PagedApiResponse<T> {
   message?: string;
 }
 
-
 export async function listProducts(): Promise<Product[]> {
-  const response = await fetchWithAuth(`${API_URL}/products`, {
+  const response = await fetchWithAuth(`${API_URL}/products?all=true`, {
     method: "GET",
     headers: buildHeaders(false),
   });
@@ -87,7 +86,7 @@ export async function createProductPrice(
   if (!response.ok) throw new Error("Failed to create product price");
 }
 
-export async function getProductPrices(productId: string): Promise<{ type: string; price: number }[]> {
+export async function getProductPrices(productId: string): Promise<{ id: string; type: string; price: number }[]> {
   const response = await fetchWithAuth(`${API_URL}/products/${productId}/prices`, {
     method: "GET",
     headers: buildHeaders(false),
@@ -95,4 +94,18 @@ export async function getProductPrices(productId: string): Promise<{ type: strin
   if (!response.ok) throw new Error("Failed to load product prices");
   const json = await response.json();
   return json.data;
+}
+
+export async function updateProductPrice(
+  productId: string,
+  priceId: string,
+  type: "DETAIL" | "WHOLESALE" | "NEW",
+  price: number
+): Promise<void> {
+  const response = await fetchWithAuth(`${API_URL}/products/${productId}/prices/${priceId}`, {
+    method: "PUT",
+    headers: buildHeaders(true),
+    body: JSON.stringify({ type, price }),
+  });
+  if (!response.ok) throw new Error("Failed to update product price");
 }

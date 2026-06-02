@@ -19,4 +19,6 @@ public interface ProductPriceRepository extends JpaRepository<ProductPrice, UUID
     boolean existsByProductIdAndTypeAndIdNot(UUID productId, ProductPriceType type, UUID id);
 
     Optional<ProductPrice> findByProductIdAndType(UUID productId, ProductPriceType type);
+
+    void deleteByProductId(UUID productId); // 👈 agregar
 }

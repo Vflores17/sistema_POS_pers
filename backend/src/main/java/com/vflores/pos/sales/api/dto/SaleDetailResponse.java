@@ -6,7 +6,7 @@ import java.util.UUID;
 public record SaleDetailResponse(
         UUID productId,
         String productName,
-        Integer quantity,
+        BigDecimal quantity,
         BigDecimal price,
         BigDecimal subtotal
 ) {

@@ -37,6 +37,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.Comparator;
 
 @Service
 @RequiredArgsConstructor
@@ -191,8 +192,7 @@ public class RouteSaleService {
                 ? ProductPriceType.WHOLESALE
                 : ProductPriceType.DETAIL;
 
-        Map<UUID, Integer> requestedQuantities = aggregateRequestedQuantities(items);
-        Set<UUID> productIds = requestedQuantities.keySet();
+Map<UUID, BigDecimal> requestedQuantities = aggregateRequestedQuantities(items);        Set<UUID> productIds = requestedQuantities.keySet();
 
         Map<UUID, Product> productsById = productRepository.findAllById(productIds)
                 .stream()
@@ -212,68 +212,71 @@ public class RouteSaleService {
                             "No price defined for product '" + product.getName() + "' and client type " + priceType
                     ));
 
-            BigDecimal price = productPrice.getPrice();
-            BigDecimal subtotal = price.multiply(BigDecimal.valueOf(item.quantity()));
-            lines.add(new SaleLineData(product, item.quantity(), price, subtotal));
-            total = total.add(subtotal);
+            BigDecimal price = item.price() != null ? item.price() : productPrice.getPrice();
+BigDecimal subtotal = price.multiply(item.quantity());lines.add(new SaleLineData(product, item.quantity(), price, subtotal));
+total = total.add(subtotal);
         }
 
         return new SaleComputation(requestedQuantities, productsById, lines, total);
     }
 
-    private Map<UUID, Integer> aggregateRequestedQuantities(List<RouteSaleItemRequest> items) {
-        Map<UUID, Integer> requestedQuantities = new LinkedHashMap<>();
-        for (RouteSaleItemRequest item : items) {
-            requestedQuantities.merge(item.productId(), item.quantity(), Integer::sum);
-        }
-        return requestedQuantities;
+    private Map<UUID, BigDecimal> aggregateRequestedQuantities(List<RouteSaleItemRequest> items) {
+    Map<UUID, BigDecimal> requestedQuantities = new LinkedHashMap<>();
+    for (RouteSaleItemRequest item : items) {
+        requestedQuantities.merge(item.productId(), item.quantity(), BigDecimal::add);
     }
+    return requestedQuantities;
+}
 
-    private void applyStockDelta(Map<UUID, Integer> quantities, Map<UUID, Product> productsById, int multiplier) {
-        for (Map.Entry<UUID, Integer> entry : quantities.entrySet()) {
-            Product product = productsById.get(entry.getKey());
-            int newStock = product.getStock() + (entry.getValue() * multiplier);
-            product.setStock(newStock);
-        }
+    private void applyStockDelta(Map<UUID, BigDecimal> quantities, Map<UUID, Product> productsById, int multiplier) {
+    for (Map.Entry<UUID, BigDecimal> entry : quantities.entrySet()) {
+        Product product = productsById.get(entry.getKey());
+        BigDecimal delta = entry.getValue().multiply(BigDecimal.valueOf(multiplier));
+        int newStock = product.getStock() + delta.intValue();
+        product.setStock(newStock);
     }
+}
 
     private void restoreStockFromDetails(List<RouteSaleDetail> details) {
-        Map<UUID, Integer> soldQuantities = new LinkedHashMap<>();
-        Map<UUID, Product> productsById = new LinkedHashMap<>();
+    Map<UUID, BigDecimal> soldQuantities = new LinkedHashMap<>();
+    Map<UUID, Product> productsById = new LinkedHashMap<>();
 
-        for (RouteSaleDetail detail : details) {
-            UUID productId = detail.getProduct().getId();
-            soldQuantities.merge(productId, detail.getQuantity(), Integer::sum);
-            productsById.put(productId, detail.getProduct());
-        }
-
-        applyStockDelta(soldQuantities, productsById, 1);
+    for (RouteSaleDetail detail : details) {
+        UUID productId = detail.getProduct().getId();
+        soldQuantities.merge(productId, detail.getQuantity(), BigDecimal::add);
+        productsById.put(productId, detail.getProduct());
     }
+
+    applyStockDelta(soldQuantities, productsById, 1);
+}
 
     private List<RouteSaleDetail> buildDetails(RouteSale routeSale, List<SaleLineData> lines) {
-        List<RouteSaleDetail> details = new ArrayList<>();
-        for (SaleLineData line : lines) {
-            details.add(RouteSaleDetail.builder()
-                    .routeSale(routeSale)
-                    .product(line.product())
-                    .quantity(line.quantity())
-                    .price(line.price())
-                    .subtotal(line.subtotal())
-                    .build());
-        }
-        return details;
+    List<RouteSaleDetail> details = new ArrayList<>();
+    for (int i = 0; i < lines.size(); i++) {
+        SaleLineData line = lines.get(i);
+        details.add(RouteSaleDetail.builder()
+                .routeSale(routeSale)
+                .product(line.product())
+                .quantity(line.quantity())
+                .price(line.price())
+                .subtotal(line.subtotal())
+                .sortOrder(i)  // 👈 agregar
+                .build());
     }
+    return details;
+}
 
     private RouteSaleResponse toResponse(RouteSale routeSale) {
         List<RouteSaleDetailResponse> details = routeSale.getDetails().stream()
-                .map(detail -> new RouteSaleDetailResponse(
-                        detail.getProduct().getId(),
-                        detail.getProduct().getName(),
-                        detail.getQuantity(),
-                        detail.getPrice(),
-                        detail.getSubtotal()
-                ))
-                .toList();
+        .sorted(Comparator.comparingInt(RouteSaleDetail::getSortOrder))  
+        .map(detail -> new RouteSaleDetailResponse(
+                detail.getProduct().getId(),
+                detail.getProduct().getName(),
+                detail.getQuantity(),
+                detail.getPrice(),
+                detail.getSubtotal()
+        ))
+        .toList();
 
         List<RouteSalePaymentResponse> payments = routeSale.getPayments().stream()
                 .map(payment -> new RouteSalePaymentResponse(
@@ -320,14 +323,14 @@ public class RouteSaleService {
 
     private record SaleLineData(
             Product product,
-            Integer quantity,
+            BigDecimal quantity,
             BigDecimal price,
             BigDecimal subtotal
     ) {
     }
 
     private record SaleComputation(
-            Map<UUID, Integer> quantityByProduct,
+            Map<UUID, BigDecimal> quantityByProduct,
             Map<UUID, Product> productsById,
             List<SaleLineData> lines,
             BigDecimal total

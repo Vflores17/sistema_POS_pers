@@ -72,6 +72,8 @@ public class Sale {
     @Builder.Default
     private PaymentMethod paymentMethod = PaymentMethod.CASH;
 
+@Column(name = "comments", columnDefinition = "TEXT")
+private String comments;
     public enum PaymentMethod {
         CASH,
         SINPE,

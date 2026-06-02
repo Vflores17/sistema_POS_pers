@@ -10,6 +10,7 @@ import {
   type Product,
   type ProductPayload,
   type ProductStatus,
+  updateProductPrice,
 } from "../api/products";
 import styles from "./Products.module.css";
 import { useNavigate } from "react-router-dom";
@@ -37,13 +38,26 @@ const INITIAL_FORM: ProductFormState = {
   status: "ACTIVE",
 };
 
+const PAGE_SIZE = 20;
+
 export default function Products(): ReactElement {
   const [products, setProducts] = useState<Product[]>([]);
   const [form, setForm] = useState<ProductFormState>(INITIAL_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
-  const [modal, setModal] = useState<{ show: boolean; message: string }>({ show: false, message: "" });
+const [modal, setModal] = useState<{
+  show: boolean;
+  message: string;
+  type?: "success" | "confirm";
+  title?: string;
+  danger?: boolean;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+}>({ show: false, message: "" });  const [search, setSearch] = useState<string>("");
+  const [page, setPage] = useState<number>(1);
   const navigate = useNavigate();
   const [productPrices, setProductPrices] = useState<Record<string, { detail: number; wholesale: number; new: number }>>({});
 
@@ -76,6 +90,22 @@ export default function Products(): ReactElement {
     [editingId]
   );
 
+  // Filtrar por búsqueda
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter((p) => p.name?.toLowerCase().includes(q));
+  }, [products, search]);
+
+  // Paginación
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // Resetear página al buscar
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
   async function loadProducts(): Promise<void> {
     setLoading(true);
     setError("");
@@ -83,7 +113,6 @@ export default function Products(): ReactElement {
       const data = await listProducts();
       setProducts(data);
 
-      // 👈 cargar precios de todos los productos
       const pricesMap: Record<string, { detail: number; wholesale: number; new: number }> = {};
       await Promise.all(data.map(async (product) => {
         try {
@@ -105,6 +134,10 @@ export default function Products(): ReactElement {
       setLoading(false);
     }
   }
+
+  function closeModal(): void {
+  setModal((prev) => ({ ...prev, show: false }));
+}
 
   function onInputChange(
     event: ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -139,33 +172,42 @@ export default function Products(): ReactElement {
     }
 
     try {
-      if (editingId) {
-        const updated = await updateProduct(editingId, payload);
-        // Actualizar precios
-        await createProductPrice(editingId, "DETAIL", Number(form.priceDetail));
-        await createProductPrice(editingId, "WHOLESALE", Number(form.priceWholesale));
-        await createProductPrice(editingId, "NEW", Number(form.priceNew));
-        setProducts((prev) =>
-          prev.map((product) => (product.id === editingId ? updated : product))
-        );
-        setModal({ show: true, message: "Producto actualizado correctamente." });
+  if (editingId) {
+    const updated = await updateProduct(editingId, payload);
+    const existingPrices = await getProductPrices(editingId);
 
+    const priceTypes = [
+      { type: "DETAIL" as const, value: Number(form.priceDetail) },
+      { type: "WHOLESALE" as const, value: Number(form.priceWholesale) },
+      { type: "NEW" as const, value: Number(form.priceNew) },
+    ];
+
+    for (const { type, value } of priceTypes) {
+      const existing = existingPrices.find(p => p.type === type);
+      if (existing) {
+        await updateProductPrice(editingId, existing.id, type, value);
       } else {
-        const created = await createProduct(payload);
-        // Crear precios
-        await createProductPrice(created.id, "DETAIL", Number(form.priceDetail));
-        await createProductPrice(created.id, "WHOLESALE", Number(form.priceWholesale));
-        await createProductPrice(created.id, "NEW", Number(form.priceNew));
-        setProducts((prev) => [created, ...prev]);
-        setModal({ show: true, message: "Producto creado correctamente." });
-
+        await createProductPrice(editingId, type, value);
       }
-      await loadProducts();
-
-      resetForm();
-    } catch (err) {
-      setError(readError(err, "No se pudo guardar el producto."));
     }
+
+    setProducts((prev) =>
+      prev.map((product) => (product.id === editingId ? updated : product))
+    );
+    setModal({ show: true, message: "Producto actualizado correctamente." });
+  } else {
+    const created = await createProduct(payload);
+    await createProductPrice(created.id, "DETAIL", Number(form.priceDetail));
+    await createProductPrice(created.id, "WHOLESALE", Number(form.priceWholesale));
+    await createProductPrice(created.id, "NEW", Number(form.priceNew));
+    setProducts((prev) => [created, ...prev]);
+    setModal({ show: true, message: "Producto creado correctamente." });
+  }
+  await loadProducts();
+  resetForm();
+} catch (err) {
+  setError(readError(err, "No se pudo guardar el producto."));
+}
   }
 
   async function onEdit(product: Product): Promise<void> {
@@ -195,22 +237,27 @@ export default function Products(): ReactElement {
   }
 
   async function onDelete(productId: string): Promise<void> {
-    const confirmed = window.confirm("¿Eliminar este producto?");
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      await deleteProduct(productId);
-      setProducts((prev) => prev.filter((product) => product.id !== productId));
-
-      if (editingId === productId) {
-        resetForm();
+  setModal({
+    show: true,
+    type: "confirm",
+    danger: true,
+    title: "Eliminar producto",
+    message: "¿Estás seguro que deseas eliminar este producto? Esta acción no se puede deshacer.",
+    confirmLabel: "Eliminar",
+    cancelLabel: "Cancelar",
+    onConfirm: async () => {
+      closeModal();
+      try {
+        await deleteProduct(productId);
+        setProducts((prev) => prev.filter((product) => product.id !== productId));
+        if (editingId === productId) resetForm();
+      } catch (err) {
+        setError(readError(err, "No se pudo eliminar el producto."));
       }
-    } catch (err) {
-      setError(readError(err, "No se pudo eliminar el producto."));
-    }
-  }
+    },
+    onCancel: closeModal,
+  });
+}
 
   function resetForm(): void {
     setForm(INITIAL_FORM);
@@ -232,104 +279,41 @@ export default function Products(): ReactElement {
             <form className={styles.form} onSubmit={onSubmit}>
               <div className={styles.field}>
                 <label htmlFor="name">Nombre</label>
-                <input
-                  id="name"
-                  name="name"
-                  value={form.name}
-                  onChange={onInputChange}
-                  required
-                />
+                <input id="name" name="name" value={form.name} onChange={onInputChange} required />
               </div>
-
               <div className={styles.field}>
                 <label htmlFor="description">Descripción</label>
-                <input
-                  id="description"
-                  name="description"
-                  value={form.description}
-                  onChange={onInputChange}
-                  placeholder="Opcional"
-                />
+                <input id="description" name="description" value={form.description} onChange={onInputChange} placeholder="Opcional" />
               </div>
-
               <div className={styles.field}>
                 <label htmlFor="stock">Stock</label>
-                <input
-                  id="stock"
-                  name="stock"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={form.stock}
-                  onChange={onInputChange}
-                  required
-                  disabled={!editingId}
-                />
+                <input id="stock" name="stock" type="number" min="0" step="1" value={form.stock} onChange={onInputChange} required disabled={!editingId} />
               </div>
-
               <div className={styles.field}>
                 <label htmlFor="priceDetail">Precio Detalle</label>
-                <input
-                  id="priceDetail"
-                  name="priceDetail"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.priceDetail}
-                  onChange={onInputChange}
-                />
+                <input id="priceDetail" name="priceDetail" type="number" min="0" step="0.01" value={form.priceDetail} onChange={onInputChange} />
               </div>
-
               <div className={styles.field}>
                 <label htmlFor="priceWholesale">Precio Mayorista</label>
-                <input
-                  id="priceWholesale"
-                  name="priceWholesale"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.priceWholesale}
-                  onChange={onInputChange}
-                />
+                <input id="priceWholesale" name="priceWholesale" type="number" min="0" step="0.01" value={form.priceWholesale} onChange={onInputChange} />
               </div>
-
               <div className={styles.field}>
                 <label htmlFor="priceNew">Precio Nuevo</label>
-                <input
-                  id="priceNew"
-                  name="priceNew"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.priceNew}
-                  onChange={onInputChange}
-                />
+                <input id="priceNew" name="priceNew" type="number" min="0" step="0.01" value={form.priceNew} onChange={onInputChange} />
               </div>
-
               <div className={styles.field}>
                 <label htmlFor="status">Estado</label>
-                <select
-                  id="status"
-                  name="status"
-                  value={form.status}
-                  onChange={onInputChange}
-                  disabled={!editingId}
-                >
+                <select id="status" name="status" value={form.status} onChange={onInputChange} disabled={!editingId}>
                   <option value="ACTIVE">Activo</option>
                   <option value="INACTIVE">Inactivo</option>
                 </select>
               </div>
-
               <div className={styles.actions}>
                 <button className={`${styles.button} ${styles.primary}`} type="submit">
                   {submitLabel}
                 </button>
                 {editingId ? (
-                  <button
-                    className={`${styles.button} ${styles.secondary}`}
-                    type="button"
-                    onClick={resetForm}
-                  >
+                  <button className={`${styles.button} ${styles.secondary}`} type="button" onClick={resetForm}>
                     Cancelar
                   </button>
                 ) : null}
@@ -339,7 +323,22 @@ export default function Products(): ReactElement {
 
           <div className={styles.card}>
             {error ? <p className={styles.error}>{error}</p> : null}
-            <div style={{ maxHeight: "625px", overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 10 }}>
+
+            {/* Buscador y contador */}
+            <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.75rem" }}>
+              <input
+                type="text"
+                placeholder="🔍 Buscar por nombre..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{ flex: 1, padding: "0.4rem 0.75rem", borderRadius: 8, border: "1px solid #d1d5db", fontSize: "0.9rem" }}
+              />
+              <span style={{ fontSize: "0.85rem", color: "#6b7280", whiteSpace: "nowrap" }}>
+                {filtered.length} producto{filtered.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+
+            <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
               <table className={styles.table}>
                 <thead>
                   <tr>
@@ -353,7 +352,7 @@ export default function Products(): ReactElement {
                   </tr>
                 </thead>
                 <tbody>
-                  {products.map((product) => (
+                  {paginated.map((product) => (
                     <tr key={product.id}>
                       <td>{product.name}</td>
                       <td>{product.description ?? "-"}</td>
@@ -381,29 +380,82 @@ export default function Products(): ReactElement {
                       </td>
                     </tr>
                   ))}
+                  {paginated.length === 0 && (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: "center", color: "#6b7280", padding: "1rem" }}>
+                        No se encontraron productos.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Paginación */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.75rem", marginTop: "0.75rem" }}>
+              <button
+                className={`${styles.button} ${styles.secondary}`}
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
+                ← Anterior
+              </button>
+              <span style={{ fontSize: "0.9rem", color: "#374151" }}>
+                Página {page} de {totalPages}
+              </span>
+              <button
+                className={`${styles.button} ${styles.secondary}`}
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+              >
+                Siguiente →
+              </button>
             </div>
 
             {!loading && products.length === 0 ? (
               <p className={styles.empty}>No hay productos registrados.</p>
             ) : null}
+
             {modal.show && (
-              <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
-                <div style={{ background: "white", borderRadius: 12, padding: "1.5rem", maxWidth: 400, width: "90%", textAlign: "center" }}>
-                  <p style={{ fontSize: "2rem", margin: 0 }}>✅</p>
-                  <h3 style={{ margin: "0.5rem 0" }}>{editingId ? "Producto actualizado" : "Producto creado"}</h3>
-                  <p>{modal.message}</p>
-                  <button
-                    className={`${styles.button} ${styles.primary}`}
-                    type="button"
-                    onClick={() => setModal({ show: false, message: "" })}
-                  >
-                    Aceptar
-                  </button>
-                </div>
-              </div>
-            )}
+  <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+    <div style={{ background: "white", borderRadius: 12, padding: "1.5rem", maxWidth: 400, width: "90%", textAlign: "center" }}>
+      <p style={{ fontSize: "2rem", margin: 0 }}>{modal.danger ? "⚠️" : "✅"}</p>
+      <h3 style={{ margin: "0.5rem 0" }}>{modal.title ?? (editingId ? "Producto actualizado" : "Producto creado")}</h3>
+      <p>{modal.message}</p>
+      <div style={{ display: "flex", gap: "0.5rem", justifyContent: "center", marginTop: "1rem" }}>
+        {modal.onConfirm && (
+          <button
+            className={`${styles.button} ${modal.danger ? styles.danger : styles.primary}`}
+            type="button"
+            onClick={modal.onConfirm}
+          >
+            {modal.confirmLabel ?? "Aceptar"}
+          </button>
+        )}
+        {modal.onCancel && (
+          <button
+            className={`${styles.button} ${styles.secondary}`}
+            type="button"
+            onClick={modal.onCancel}
+          >
+            {modal.cancelLabel ?? "Cancelar"}
+          </button>
+        )}
+        {!modal.onConfirm && (
+          <button
+            className={`${styles.button} ${styles.primary}`}
+            type="button"
+            onClick={() => setModal({ show: false, message: "" })}
+          >
+            Aceptar
+          </button>
+        )}
+      </div>
+    </div>
+  </div>
+)}
           </div>
         </section>
       </section>

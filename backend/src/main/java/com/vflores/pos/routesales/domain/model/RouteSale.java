@@ -81,6 +81,7 @@ public class RouteSale {
 
     public enum RouteStatus {
         PENDING,
+        PARTIAL,
         PAID,
         CANCELLED
     }
