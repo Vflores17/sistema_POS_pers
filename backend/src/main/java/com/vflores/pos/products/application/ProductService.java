@@ -83,17 +83,22 @@ public class ProductService {
         if (!productRepository.existsById(id)) {
             throw new ResourceNotFoundException("Product not found: " + id);
         }
+        if (productRepository.countSaleDetailsByProductId(id) > 0) {
+            throw new ConflictException("No se puede eliminar el producto porque tiene facturas asociadas. Puede desactivarlo en su lugar.");
+        }
         productPriceRepository.deleteByProductId(id);
         productRepository.deleteById(id);
     }
 
     private void validateUniqueName(String name, UUID currentId) {
-        productRepository.findByNameIgnoreCase(name.trim())
-                .filter(existing -> !existing.getId().equals(currentId))
-                .ifPresent(existing -> {
-                    throw new ConflictException("Product name is already registered");
-                });
-    }
+    productRepository.findByNameIgnoreCase(name.trim())
+            .stream()
+            .filter(existing -> !existing.getId().equals(currentId))
+            .findFirst()
+            .ifPresent(existing -> {
+                throw new ConflictException("Product name is already registered");
+            });
+}
 
     private String normalizeName(String name) {
         return name.trim();

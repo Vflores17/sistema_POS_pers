@@ -15,7 +15,6 @@ public record UpdateProductRequest(
         String name,
 
         @NotNull
-        @DecimalMin(value = "0.01", message = "price must be greater than 0")
         BigDecimal price,
 
         @NotNull

@@ -66,10 +66,10 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiErrorResponse> handleGeneric(Exception ex) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiErrorResponse.of("INTERNAL_ERROR", "Unexpected server error", List.of()));
-    }
+public ResponseEntity<ApiErrorResponse> handleGeneric(Exception ex) {
+    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+            .body(ApiErrorResponse.of("INTERNAL_ERROR", "Unexpected server error", List.of()));
+}
 
     private ApiErrorResponse.FieldErrorItem toFieldError(FieldError fieldError) {
         return new ApiErrorResponse.FieldErrorItem(fieldError.getField(), fieldError.getDefaultMessage());

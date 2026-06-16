@@ -15,6 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -87,4 +89,11 @@ public class ProductPriceService {
                 productPrice.getUpdatedAt()
         );
     }
+
+    @Transactional(readOnly = true)
+public Map<UUID, List<ProductPriceResponse>> findAllGroupedByProduct() {
+    return productPriceRepository.findAll().stream()
+            .map(this::toResponse)
+            .collect(Collectors.groupingBy(ProductPriceResponse::productId));
+}
 }

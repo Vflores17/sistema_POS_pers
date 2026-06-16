@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
+import java.util.Map;
 import java.util.List;
 import java.util.UUID;
 
@@ -98,6 +98,11 @@ public class ProductController {
     public ResponseEntity<ApiResponse<List<ProductPriceResponse>>> findPrices(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.ok(productPriceService.findByProductId(id)));
     }
+
+    @GetMapping("/prices/all")
+public ResponseEntity<ApiResponse<Map<UUID, List<ProductPriceResponse>>>> findAllPrices() {
+    return ResponseEntity.ok(ApiResponse.ok(productPriceService.findAllGroupedByProduct()));
+}
 
     @PostMapping("/{id}/prices")
     public ResponseEntity<ApiResponse<ProductPriceResponse>> createPrice(

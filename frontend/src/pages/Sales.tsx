@@ -1,6 +1,6 @@
 import type { ChangeEvent, ReactElement } from "react";
 import { useEffect, useMemo, useState, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { listClients, type Client } from "../api/clients";
 import {
   changeSaleStatus,
@@ -122,6 +122,9 @@ function saveCaja(caja: CajaState): void {
 }
 
 export default function Sales(): ReactElement {
+  const [showModificarModal, setShowModificarModal] = useState<boolean>(false);
+  const [modificarInvoiceInput, setModificarInvoiceInput] =
+    useState<string>("");
   const [caja, setCaja] = useState<CajaState>(loadCaja);
   const [showAbrirCajaModal, setShowAbrirCajaModal] = useState<boolean>(false);
   const [montoInicialDraft, setMontoInicialDraft] = useState<string>("30000");
@@ -134,6 +137,7 @@ export default function Sales(): ReactElement {
 
   const [productModalIndex, setProductModalIndex] = useState<number>(-1);
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams<{ id: string }>();
   const isNewScreen = window.location.pathname === "/sales/new";
   const isEditScreen = window.location.pathname.endsWith("/edit");
@@ -205,7 +209,7 @@ export default function Sales(): ReactElement {
     telefono: string;
   } | null>(null);
 
-  const [originalPayments, setOriginalPayments] =
+  const [, setOriginalPayments] =
     useState<PaymentDraftState>(EMPTY_PAYMENTS);
 
   const [cierreToPrint, setCierreToPrint] = useState<{
@@ -248,6 +252,28 @@ export default function Sales(): ReactElement {
     return new Map(clients.map((client) => [client.id, client]));
   }, [clients]);
 
+  function onAbrirModificar(): void {
+    const selected = sortedAndFilteredSales.find((s) => s.id === selectedRowId);
+    setModificarInvoiceInput(selected ? String(selected.invoiceNumber) : "");
+    setShowModificarModal(true);
+  }
+
+  async function onConfirmarModificar(): Promise<void> {
+    const numero = Number(modificarInvoiceInput);
+    if (!numero) {
+      setError("Ingresá un número de factura válido.");
+      return;
+    }
+    const sale =
+      sortedAndFilteredSales.find((s) => s.invoiceNumber === numero) ??
+      sales.find((s) => s.invoiceNumber === numero);
+    if (!sale) {
+      setError(`No se encontró la factura número ${numero}.`);
+      return;
+    }
+    setShowModificarModal(false);
+    navigate(`/sales/${sale.id}/edit`, { state: { selectedId: sale.id } });
+  }
 
   function abrirCaja(): void {
     if (!montoInicialDraft) {
@@ -445,12 +471,12 @@ export default function Sales(): ReactElement {
             cancelLabel: "Cancelar",
             onConfirm: () => {
               closeModal();
-              navigate("/sales");
+              navigate("/sales", { state: { selectedId: id } });
             },
             onCancel: closeModal,
           });
         } else {
-          navigate("/sales");
+          navigate("/sales", { state: { selectedId: id } });
         }
       }
       // Alt + P → Método de pago
@@ -656,8 +682,7 @@ export default function Sales(): ReactElement {
       }
       if (e.altKey && e.key.toLowerCase() === "o") {
         e.preventDefault();
-        if (caja.abierta && selectedRowId)
-          navigate(`/sales/${selectedRowId}/edit`);
+        if (caja.abierta) onAbrirModificar();
       }
       if (e.altKey && e.key.toLowerCase() === "v") {
         e.preventDefault();
@@ -712,25 +737,36 @@ export default function Sales(): ReactElement {
       }
 
       if (e.key === "ArrowDown") {
-  e.preventDefault();
-  const currentIndex = sortedAndFilteredSales.findIndex(s => s.id === selectedRowId);
-  const nextIndex = Math.min(currentIndex + 1, sortedAndFilteredSales.length - 1);
-  setSelectedRowId(sortedAndFilteredSales[nextIndex]?.id ?? "");
-}
-if (e.key === "ArrowUp") {
-  e.preventDefault();
-  const currentIndex = sortedAndFilteredSales.findIndex(
-    (s) => s.id === selectedRowId,
-  );
-  const prevIndex = Math.max(currentIndex - 1, 0);
-  setSelectedRowId(sortedAndFilteredSales[prevIndex]?.id ?? "");
-}
+        e.preventDefault();
+        const currentIndex = sortedAndFilteredSales.findIndex(
+          (s) => s.id === selectedRowId,
+        );
+        const nextIndex = Math.min(
+          currentIndex + 1,
+          sortedAndFilteredSales.length - 1,
+        );
+        setSelectedRowId(sortedAndFilteredSales[nextIndex]?.id ?? "");
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        const currentIndex = sortedAndFilteredSales.findIndex(
+          (s) => s.id === selectedRowId,
+        );
+        const prevIndex = Math.max(currentIndex - 1, 0);
+        setSelectedRowId(sortedAndFilteredSales[prevIndex]?.id ?? "");
+      }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-    
-  }, [isFormScreen, modal.show, selectedRowId, caja, navigate, sortedAndFilteredSales]);
+  }, [
+    isFormScreen,
+    modal.show,
+    selectedRowId,
+    caja,
+    navigate,
+    sortedAndFilteredSales,
+  ]);
 
   useEffect(() => {
     if (!selectedRowRef.current) return;
@@ -764,26 +800,30 @@ if (e.key === "ArrowUp") {
   }, [selectedRowId, saleDraft.lines]);
 
   useEffect(() => {
-  if (isFormScreen) return;
-  if (!selectedRowId) return;
+    if (isFormScreen) return;
+    if (!selectedRowId) return;
 
-  const container = document.querySelector(`.${styles.tableContainer}`) as HTMLElement;
-  if (!container) return;
+    const container = document.querySelector(
+      `.${styles.tableContainer}`,
+    ) as HTMLElement;
+    if (!container) return;
 
-  const selectedRow = container.querySelector(`tr.${styles.selected}`) as HTMLElement;
-  if (!selectedRow) return;
+    const selectedRow = container.querySelector(
+      `tr.${styles.selected}`,
+    ) as HTMLElement;
+    if (!selectedRow) return;
 
-  const rowTop = selectedRow.offsetTop;
-  const rowBottom = rowTop + selectedRow.offsetHeight;
-  const containerTop = container.scrollTop;
-  const containerBottom = container.scrollTop + container.clientHeight;
+    const rowTop = selectedRow.offsetTop;
+    const rowBottom = rowTop + selectedRow.offsetHeight;
+    const containerTop = container.scrollTop;
+    const containerBottom = container.scrollTop + container.clientHeight;
 
-  if (rowTop < containerTop) {
-    container.scrollTop = rowTop;
-  } else if (rowBottom > containerBottom) {
-    container.scrollTop = rowBottom - container.clientHeight;
-  }
-}, [selectedRowId, isFormScreen]);
+    if (rowTop < containerTop) {
+      container.scrollTop = rowTop;
+    } else if (rowBottom > containerBottom) {
+      container.scrollTop = rowBottom - container.clientHeight;
+    }
+  }, [selectedRowId, isFormScreen]);
 
   const sessionUserLabel = useMemo(() => {
     const token = localStorage.getItem("token");
@@ -805,8 +845,6 @@ if (e.key === "ArrowUp") {
     activeElement === "input" ||
     activeElement === "select" ||
     activeElement === "textarea";
-
-  
 
   const filteredClientOptions = useMemo(() => {
     const term = clientSearch.trim().toLowerCase();
@@ -893,7 +931,6 @@ if (e.key === "ArrowUp") {
     return "PAID";
   }, [paymentTotal, calculatedTotal, saleDraft.status]);
 
-  
   const [dropdownPosition, setDropdownPosition] = useState<{
     top: number;
     left: number;
@@ -942,8 +979,8 @@ if (e.key === "ArrowUp") {
             status: sale.status,
           });
           if (sale.comments) {
-  setShowComments(true);
-}
+            setShowComments(true);
+          }
           const clientName =
             baseData[0].find((c) => c.id === sale.clientId)?.name ?? "";
           setClientSearch(clientName);
@@ -976,6 +1013,23 @@ if (e.key === "ArrowUp") {
       } else {
         const salesData = await listSales();
         setSales(salesData);
+
+        const state = location.state as { selectedId?: string } | null;
+        if (state?.selectedId) {
+          setSelectedRowId(state.selectedId);
+          setTimeout(() => {
+            const container = document.querySelector(
+              `.${styles.tableContainer}`,
+            ) as HTMLElement;
+            const selectedRow = container?.querySelector(
+              `tr.${styles.selected}`,
+            ) as HTMLElement;
+            if (container && selectedRow) {
+              container.scrollTop =
+                selectedRow.offsetTop - container.clientHeight / 2;
+            }
+          }, 100);
+        }
       }
     } catch (err) {
       setError(readError(err, "No se pudo cargar la información de ventas."));
@@ -1115,7 +1169,7 @@ if (e.key === "ArrowUp") {
       return;
     }
 
-      let unitPrice = "";
+    let unitPrice = "";
     try {
       unitPrice = await resolveUnitPrice(productId, saleDraft.clientId);
     } catch {
@@ -1232,54 +1286,40 @@ if (e.key === "ArrowUp") {
         const yaExiste = caja.facturaIds.includes(saved.id);
         const tienePagos = paymentsPayload.length > 0;
         if (!isEditScreen || tienePagos) {
-          const nuevosPagos: {
-            facturaId: string;
-            method: string;
-            amount: number;
-          }[] = paymentsPayload
-            .map((p) => {
-              const montoOriginal = isEditScreen
-                ? Number(originalPayments[p.method]?.amount ?? 0)
-                : 0;
-              const diferencia = p.amount - montoOriginal;
-              return diferencia > 0
-                ? {
-                    facturaId: saved.id,
-                    method: p.method as string,
-                    amount: diferencia,
-                  }
-                : null;
-            })
-            .filter(
-              (p): p is { facturaId: string; method: string; amount: number } =>
-                p !== null,
-            );
+          const nuevosPagos = paymentsPayload.map((p) => ({
+            facturaId: saved.id,
+            method: p.method as string,
+            amount: p.amount,
+          }));
 
-          if (nuevosPagos.length > 0 || !yaExiste) {
-            const updatedCaja = {
-              ...caja,
-              facturaIds: yaExiste
-                ? caja.facturaIds
-                : [...caja.facturaIds, saved.id],
-              pagos: [...caja.pagos, ...nuevosPagos],
-            };
-            setCaja(updatedCaja);
-            saveCaja(updatedCaja);
-          }
+          // Si es edición, eliminar los pagos anteriores de esta factura y reemplazarlos
+          const pagosSinEstaFactura = isEditScreen
+            ? caja.pagos.filter((p) => p.facturaId !== saved.id)
+            : caja.pagos;
+
+          const updatedCaja = {
+            ...caja,
+            facturaIds: yaExiste
+              ? caja.facturaIds
+              : [...caja.facturaIds, saved.id],
+            pagos: [...pagosSinEstaFactura, ...nuevosPagos],
+          };
+          setCaja(updatedCaja);
+          saveCaja(updatedCaja);
         }
       }
       if (paymentsPayload.length > 0) {
-  await savePayments(saved.id, paymentsPayload);
-}
-if (!isEditScreen && saleDraft.status && saleDraft.status !== "PENDING") {
-  await changeSaleStatus(saved.id, saleDraft.status);
-}
+        await savePayments(saved.id, paymentsPayload);
+      }
+      if (!isEditScreen && saleDraft.status && saleDraft.status !== "PENDING") {
+        await changeSaleStatus(saved.id, saleDraft.status);
+      }
 
-if (printAfterSave) {
-  const saleToprint = await getSaleById(saved.id);
-  setSaleToPrint(saleToprint);
-  setTimeout(() => window.print(), 300);
-}
+      if (printAfterSave) {
+        const saleToprint = await getSaleById(saved.id);
+        setSaleToPrint(saleToprint);
+        setTimeout(() => window.print(), 300);
+      }
       // Resetear formulario para nueva factura
       const next = await getNextInvoiceNumber();
       setInvoiceNumber(next);
@@ -1298,7 +1338,8 @@ if (printAfterSave) {
           : "La factura fue creada correctamente.",
         onConfirm: () => {
           closeModal();
-          if (isEditScreen) navigate("/sales"); // 👈
+          if (isEditScreen)
+            navigate("/sales", { state: { selectedId: saved.id } });
         },
         confirmLabel: "Aceptar",
       });
@@ -1404,13 +1445,16 @@ if (printAfterSave) {
                     }
                     onKeyDown={(e) => {
                       if (!showClientDropdown) return;
-                      const options = filteredClientOptions.slice(0, 4);
+                      const options = filteredClientOptions;
                       if (e.key === "ArrowDown") {
-                        e.preventDefault();
-                        setClientDropdownIndex((prev) =>
-                          Math.min(prev + 1, options.length - 1),
-                        );
-                      }
+  e.preventDefault();
+  setClientDropdownIndex((prev) => Math.min(prev + 1, options.length - 1));
+  setTimeout(() => {
+    const dropdown = document.querySelector(`.${styles.clientDropdown}`);
+    const selected = dropdown?.querySelector(`[data-index="${clientDropdownIndex + 1}"]`) as HTMLElement;
+    selected?.scrollIntoView({ block: "nearest" });
+  }, 0);
+}
                       if (e.key === "ArrowUp") {
                         e.preventDefault();
                         setClientDropdownIndex((prev) => Math.max(prev - 1, 0));
@@ -1435,12 +1479,12 @@ if (printAfterSave) {
                     autoComplete="off"
                   />
                   {showClientDropdown && (
-                    <div className={styles.clientDropdown}>
+                    <div className={styles.clientDropdown} style={{ maxHeight: "200px", overflowY: "auto" }}>
                       {filteredClientOptions
-                        .slice(0, 4)
                         .map((client, index) => (
                           <div
                             key={client.id}
+                            data-index={index}
                             className={styles.clientOption}
                             style={
                               index === clientDropdownIndex
@@ -1515,7 +1559,6 @@ if (printAfterSave) {
                       )}
                     </div>
                   ))}
-                  
                 </div>
               </div>
               <div className={styles.field}>
@@ -1523,46 +1566,68 @@ if (printAfterSave) {
                 <input value={sessionUserLabel} readOnly />
               </div>
               <div className={styles.field}>
-  <label>Estado</label>
-  <div style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem" }}>
-    <select
-      value={
-        calculatedStatus === "CANCELLED"
-          ? "CANCELLED"
-          : saleDraft.status === "CANCELLED"
-            ? "CANCELLED"
-            : calculatedStatus
-      }
-      disabled={
-        !isEditScreen ||
-        (saleDraft.status !== "PENDING" &&
-          saleDraft.status !== "PARTIAL")
-      }
-      onChange={async (e) => {
-        const newStatus = e.target.value as SaleStatus;
-        setSaleDraft((prev) => ({ ...prev, status: newStatus }));
-      }}
-    >
-      <option value="PENDING">Pendiente</option>
-      <option value="PARTIAL">Parcial</option>
-      <option value="PAID">Pagada</option>
-      <option value="CANCELLED">Cancelada</option>
-    </select>
-    <div style={{ fontSize: "0.78rem", color: "#4b5563", lineHeight: 1.4 }}>
-      <div>Suma: ₡{paymentTotal.toLocaleString("es-CR")}</div>
-      <div>Total: ₡{calculatedTotal.toLocaleString("es-CR")}</div>
-      {paymentTotal > 0 && paymentTotal < calculatedTotal && (
-        <div style={{ color: "#b45309" }}>⚠️ ₡{(calculatedTotal - paymentTotal).toLocaleString("es-CR")}</div>
-      )}
-      {paymentTotal > calculatedTotal && (
-        <div style={{ color: "#dc2626" }}>❌ ₡{(paymentTotal - calculatedTotal).toLocaleString("es-CR")}</div>
-      )}
-      {paymentTotal > 0 && paymentTotal === calculatedTotal && (
-        <div style={{ color: "#16a34a" }}>✅ Completo</div>
-      )}
-    </div>
-  </div>
-</div>
+                <label>Estado</label>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "0.75rem",
+                  }}
+                >
+                  <select
+                    value={
+                      calculatedStatus === "CANCELLED"
+                        ? "CANCELLED"
+                        : saleDraft.status === "CANCELLED"
+                          ? "CANCELLED"
+                          : calculatedStatus
+                    }
+                    disabled={
+                      !isEditScreen ||
+                      (saleDraft.status !== "PENDING" &&
+                        saleDraft.status !== "PARTIAL")
+                    }
+                    onChange={async (e) => {
+                      const newStatus = e.target.value as SaleStatus;
+                      setSaleDraft((prev) => ({ ...prev, status: newStatus }));
+                    }}
+                  >
+                    <option value="PENDING">Pendiente</option>
+                    <option value="PARTIAL">Parcial</option>
+                    <option value="PAID">Pagada</option>
+                    <option value="CANCELLED">Cancelada</option>
+                  </select>
+                  <div
+                    style={{
+                      fontSize: "0.78rem",
+                      color: "#4b5563",
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    <div>Suma: ₡{paymentTotal.toLocaleString("es-CR")}</div>
+                    <div>Total: ₡{calculatedTotal.toLocaleString("es-CR")}</div>
+                    {paymentTotal > 0 && paymentTotal < calculatedTotal && (
+                      <div style={{ color: "#b45309" }}>
+                        ⚠️ ₡
+                        {(calculatedTotal - paymentTotal).toLocaleString(
+                          "es-CR",
+                        )}
+                      </div>
+                    )}
+                    {paymentTotal > calculatedTotal && (
+                      <div style={{ color: "#dc2626" }}>
+                        ❌ ₡
+                        {(paymentTotal - calculatedTotal).toLocaleString(
+                          "es-CR",
+                        )}
+                      </div>
+                    )}
+                    {paymentTotal > 0 && paymentTotal === calculatedTotal && (
+                      <div style={{ color: "#16a34a" }}>✅ Completo</div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
             {!isViewScreen && (
               <div className={styles.menuBar}>
@@ -1691,7 +1756,7 @@ if (printAfterSave) {
                                       (lineSearch[line.id] ?? "").toLowerCase(),
                                     ),
                                 )
-                                .slice(0, 5);
+                                .slice(0, 10);
                               if (e.key === "ArrowDown") {
                                 e.preventDefault();
                                 setLineDropdownIndex((prev) => ({
@@ -1768,10 +1833,11 @@ if (printAfterSave) {
                                       (lineSearch[line.id] ?? "").toLowerCase(),
                                     ),
                                 )
-                                .slice(0, 5)
+                                .slice(0, 10)
                                 .map((p, index) => (
                                   <div
                                     key={p.id}
+                                    data-index={index}
                                     className={styles.clientOption}
                                     style={
                                       index ===
@@ -1935,7 +2001,7 @@ if (printAfterSave) {
           </div>
 
           <div className={styles.formBottomBar}>
-            <p className={styles.totalBar}>
+            <p className={styles.totalBar} style={{ fontSize: "2rem", fontWeight: "bold" }}>
               Total: ₡{calculatedTotal.toLocaleString("es-CR")}
             </p>
             <div className={styles.bottomActions}>
@@ -1962,7 +2028,9 @@ if (printAfterSave) {
               <button
                 className={styles.button}
                 type="button"
-                onClick={() => navigate("/sales")}
+                onClick={() =>
+                  navigate("/sales", { state: { selectedId: id } })
+                }
               >
                 <u>S</u>alir
               </button>
@@ -2127,7 +2195,7 @@ if (printAfterSave) {
                         );
 
                         const updated = await listProducts();
-                        setProducts(updated);
+                        setProducts(updated.filter(p => p.status === "ACTIVE"));
                         setSaleDraft((prev) => ({
                           ...prev,
                           lines: [
@@ -2528,7 +2596,7 @@ if (printAfterSave) {
                         .toLowerCase()
                         .includes(clientFilterSearch.toLowerCase()),
                     )
-                    .slice(0, 6);
+                    .slice(0, 10);
                   if (e.key === "ArrowDown") {
                     e.preventDefault();
                     setClientFilterDropdownIndex((prev) =>
@@ -2555,17 +2623,18 @@ if (printAfterSave) {
                 }}
               />
               {showClientFilterDropdown && clientFilterSearch && (
-                <div className={styles.clientDropdown}>
+                <div className={styles.clientDropdown} style={{ maxHeight: "200px", overflowY: "auto" }}>
                   {clients
                     .filter((c) =>
                       c.name
                         .toLowerCase()
                         .includes(clientFilterSearch.toLowerCase()),
                     )
-                    .slice(0, 6)
+                    .slice(0, 10)
                     .map((client, index) => (
                       <div
                         key={client.id}
+                        data-index={index}
                         className={styles.clientOption}
                         style={
                           index === clientFilterDropdownIndex
@@ -2690,9 +2759,7 @@ if (printAfterSave) {
               className={styles.button}
               type="button"
               disabled={!caja.abierta || !selectedRowId}
-              onClick={() =>
-                selectedRowId && navigate(`/sales/${selectedRowId}/edit`)
-              }
+              onClick={onAbrirModificar}
             >
               M<u>o</u>dificar
             </button>
@@ -3087,6 +3154,54 @@ if (printAfterSave) {
                   className={styles.button}
                   type="button"
                   onClick={() => setWhatsappModal(null)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {showModificarModal && (
+          <div className={styles.modalBackdrop}>
+            <div className={styles.modal}>
+              <header className={styles.modalHeader}>
+                <h3>Modificar Factura</h3>
+                <button
+                  className={styles.button}
+                  type="button"
+                  onClick={() => setShowModificarModal(false)}
+                >
+                  Cerrar
+                </button>
+              </header>
+              <div className={styles.field}>
+                <label>Número de factura</label>
+                <input
+                  type="number"
+                  autoFocus
+                  value={modificarInvoiceInput}
+                  onChange={(e) => setModificarInvoiceInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void onConfirmarModificar();
+                    if (e.key === "Escape") setShowModificarModal(false);
+                  }}
+                  placeholder="Ej: 123"
+                />
+              </div>
+              <div
+                style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}
+              >
+                <button
+                  className={styles.primaryButton}
+                  type="button"
+                  onClick={() => void onConfirmarModificar()}
+                >
+                  Abrir
+                </button>
+                <button
+                  className={styles.button}
+                  type="button"
+                  onClick={() => setShowModificarModal(false)}
                 >
                   Cancelar
                 </button>

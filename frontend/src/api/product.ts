@@ -14,4 +14,6 @@ export async function getProducts() {
     }
 
     return response.json();
+
+    
 }

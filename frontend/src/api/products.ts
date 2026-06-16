@@ -70,7 +70,16 @@ export async function deleteProduct(id: string): Promise<void> {
     method: "DELETE",
     headers: buildHeaders(false),
   });
-  if (!response.ok) throw new Error("Failed to delete product");
+  if (!response.ok) {
+    let message = "Failed to delete product";
+    try {
+      const body = await response.json() as { error?: { message?: string } };
+      if (body.error?.message) message = body.error.message;
+    } catch {
+      // usar mensaje genérico
+    }
+    throw new Error(message);
+  }
 }
 
 export async function createProductPrice(
@@ -108,4 +117,14 @@ export async function updateProductPrice(
     body: JSON.stringify({ type, price }),
   });
   if (!response.ok) throw new Error("Failed to update product price");
+}
+
+export async function getAllProductPrices(): Promise<Record<string, { id: string; type: string; price: number }[]>> {
+  const response = await fetchWithAuth(`${API_URL}/products/prices/all`, {
+    method: "GET",
+    headers: buildHeaders(false),
+  });
+  if (!response.ok) throw new Error("Failed to load all prices");
+  const json = await response.json();
+  return json.data;
 }

@@ -7,6 +7,7 @@ import {
   updateProduct,
   getProductPrices,
   createProductPrice,
+  getAllProductPrices,
   type Product,
   type ProductPayload,
   type ProductStatus,
@@ -107,33 +108,32 @@ const [modal, setModal] = useState<{
   }, [search]);
 
   async function loadProducts(): Promise<void> {
-    setLoading(true);
-    setError("");
-    try {
-      const data = await listProducts();
-      setProducts(data);
+  setLoading(true);
+  setError("");
+  try {
+    const [data, allPrices] = await Promise.all([
+      listProducts(),
+      getAllProductPrices(),
+    ]);
+    setProducts(data);
 
-      const pricesMap: Record<string, { detail: number; wholesale: number; new: number }> = {};
-      await Promise.all(data.map(async (product) => {
-        try {
-          const prices = await getProductPrices(product.id);
-          pricesMap[product.id] = {
-            detail: prices.find(p => p.type === "DETAIL")?.price ?? 0,
-            wholesale: prices.find(p => p.type === "WHOLESALE")?.price ?? 0,
-            new: prices.find(p => p.type === "NEW")?.price ?? 0,
-          };
-        } catch {
-          pricesMap[product.id] = { detail: 0, wholesale: 0, new: 0 };
-        }
-      }));
-      setProductPrices(pricesMap);
-
-    } catch (err) {
-      setError(readError(err, "No se pudieron cargar los productos."));
-    } finally {
-      setLoading(false);
+    const pricesMap: Record<string, { detail: number; wholesale: number; new: number }> = {};
+    for (const product of data) {
+      const prices = allPrices[product.id] ?? [];
+      pricesMap[product.id] = {
+        detail: prices.find(p => p.type === "DETAIL")?.price ?? 0,
+        wholesale: prices.find(p => p.type === "WHOLESALE")?.price ?? 0,
+        new: prices.find(p => p.type === "NEW")?.price ?? 0,
+      };
     }
+    setProductPrices(pricesMap);
+
+  } catch (err) {
+    setError(readError(err, "No se pudieron cargar los productos."));
+  } finally {
+    setLoading(false);
   }
+}
 
   function closeModal(): void {
   setModal((prev) => ({ ...prev, show: false }));
