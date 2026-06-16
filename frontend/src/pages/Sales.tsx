@@ -3214,10 +3214,10 @@ export default function Sales(): ReactElement {
   );
 
   function generarExcelCierre(): void {
-    const facturasDeTurno = sales.filter((sale) =>
-      caja.facturaIds.includes(sale.id),
-    );
-
+    const facturasDeTurno = sales
+  .filter((sale) => caja.facturaIds.includes(sale.id) && sale.status !== "PENDING")
+  .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  
     const filas: Record<string, string | number>[] = facturasDeTurno.map(
       (sale) => {
         const clientName =
