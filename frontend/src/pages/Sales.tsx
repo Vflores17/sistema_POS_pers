@@ -3217,7 +3217,7 @@ export default function Sales(): ReactElement {
     const facturasDeTurno = sales
   .filter((sale) => caja.facturaIds.includes(sale.id) && sale.status !== "PENDING")
   .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  
+
     const filas: Record<string, string | number>[] = facturasDeTurno.map(
       (sale) => {
         const clientName =
@@ -3395,16 +3395,16 @@ export default function Sales(): ReactElement {
     const totalCantidad = sale.details.reduce((sum, d) => sum + d.quantity, 0);
 
     const detalles = sale.details
-      .map(
-        (detail) => `
-    <tr>
-      <td style="text-align:center;padding:2mm 0">${detail.quantity}</td>
-      <td style="padding:2mm 5mm">${productsById.get(detail.productId)?.name ?? detail.productName}</td>
-      <td style="text-align:right;padding:2mm 0">₡${Number(detail.subtotal).toLocaleString("es-CR")}</td>
-    </tr>
-  `,
-      )
-      .join("");
+  .map(
+    (detail) => `
+  <tr style="page-break-inside: avoid;">
+    <td style="text-align:center;padding:2mm 0">${detail.quantity}</td>
+    <td style="padding:2mm 5mm">${productsById.get(detail.productId)?.name ?? detail.productName}</td>
+    <td style="text-align:right;padding:2mm 0">₡${Number(detail.subtotal).toLocaleString("es-CR")}</td>
+  </tr>
+`,
+  )
+  .join("");
 
     const pagos = (sale.payments ?? [])
       .map(
@@ -3469,13 +3469,14 @@ export default function Sales(): ReactElement {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const html2pdf = (window as any).html2pdf;
     html2pdf()
-      .set({
-        margin: 0,
-        filename: `${client?.name ?? "cliente"}_${sale.invoiceNumber}.pdf`,
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-      })
+  .set({
+    margin: 0,
+    filename: `...`,
+    image: { type: "jpeg", quality: 0.98 },
+    html2canvas: { scale: 2 },
+    jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
+    pagebreak: { mode: ["avoid-all", "css", "legacy"] }, // 👈 agregar
+  })
       .from(html)
       .save()
       .then(() => {
