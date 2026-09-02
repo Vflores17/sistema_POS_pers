@@ -347,6 +347,40 @@ class EffectivePermissionServiceTest {
         );
     }
 
+    @Test
+    void allowLegacyWriteExpandsBeforeEffectivePermissionsAreCalculated() {
+        Permission legacy = permission("SALE_WRITE");
+        User user = userWithRole("CONSULTA", permission("SALE_READ"));
+        when(overrideRepository.findAllByUserId(user.getId())).thenReturn(List.of(
+                override(user, legacy, PermissionOverrideEffect.ALLOW)
+        ));
+
+        EffectivePermissionService.PermissionResolution resolution = service.resolve(user);
+
+        assertThat(resolution.allowed()).contains(
+                "SALE_WRITE", "SALE_CREATE", "SALE_UPDATE", "SALE_DELETE", "SALE_CANCEL"
+        );
+        assertThat(resolution.effective()).containsAll(resolution.allowed());
+    }
+
+    @Test
+    void denyLegacyWriteRemovesLegacyAndEveryExpandedOperation() {
+        Permission legacy = permission("SALE_WRITE");
+        User user = userWithRole("VENDEDOR", permission("SALE_WRITE"));
+        when(overrideRepository.findAllByUserId(user.getId())).thenReturn(List.of(
+                override(user, legacy, PermissionOverrideEffect.DENY)
+        ));
+
+        EffectivePermissionService.PermissionResolution resolution = service.resolve(user);
+
+        assertThat(resolution.denied()).contains(
+                "SALE_WRITE", "SALE_CREATE", "SALE_UPDATE", "SALE_DELETE", "SALE_CANCEL"
+        );
+        assertThat(resolution.effective()).doesNotContain(
+                "SALE_WRITE", "SALE_CREATE", "SALE_UPDATE", "SALE_DELETE", "SALE_CANCEL"
+        );
+    }
+
     private void assertLegacyWriteExpansion(String legacy, String... granular) {
         User user = userWithRole("LEGACY", permission(legacy));
         when(overrideRepository.findAllByUserId(user.getId())).thenReturn(List.of());

@@ -45,13 +45,15 @@ public class EffectivePermissionService {
     @Transactional(readOnly = true)
     public PermissionResolution resolve(User user) {
         Set<String> inherited = inheritedPermissions(user.getRoles());
-        Set<String> effective = new LinkedHashSet<>(inherited);
-        expandLegacyPermissions(effective);
+        expandLegacyPermissions(inherited);
 
         List<UserPermissionOverride> overrides = overrideRepository.findAllByUserId(user.getId());
         Set<String> allowed = codesWithEffect(overrides, PermissionOverrideEffect.ALLOW);
         Set<String> denied = codesWithEffect(overrides, PermissionOverrideEffect.DENY);
+        expandLegacyPermissions(allowed);
+        expandLegacyPermissions(denied);
 
+        Set<String> effective = new LinkedHashSet<>(inherited);
         effective.addAll(allowed);
         if (hasActiveRole(user.getRoles(), ADMIN_ROLE)) {
             permissionRepository.findAll().stream()

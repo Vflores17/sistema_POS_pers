@@ -1,4 +1,5 @@
 import { API_URL, buildHeaders, fetchWithAuth  } from "./http";
+import { parseApiResponse, requireApiSuccess } from "./errors";
 
 export type UserStatus = "ACTIVE" | "BLOCKED" | "INACTIVE";
 
@@ -66,27 +67,12 @@ export interface UpdateUserPayload {
   roleIds: string[];
 }
 
-interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-  message?: string;
-}
-
-interface PagedApiResponse<T> {
-  success: boolean;
-  data: T[];
-  message?: string;
-}
-
-
 export async function listUsers(): Promise<User[]> {
   const response = await fetchWithAuth(`${API_URL}/users`, {
     method: "GET",
     headers: buildHeaders(false),
   });
-  if (!response.ok) throw new Error("Failed to load users");
-  const json = (await response.json()) as PagedApiResponse<User>;
-  return json.data;
+  return parseApiResponse<User[]>(response, "No se pudieron cargar los usuarios.");
 }
 
 export async function createUser(payload: CreateUserPayload): Promise<User> {
@@ -95,9 +81,7 @@ export async function createUser(payload: CreateUserPayload): Promise<User> {
     headers: buildHeaders(true),
     body: JSON.stringify(payload),
   });
-  if (!response.ok) throw new Error("Failed to create user");
-  const json = (await response.json()) as ApiResponse<User>;
-  return json.data;
+  return parseApiResponse<User>(response, "No se pudo crear el usuario.");
 }
 
 export async function updateUser(id: string, payload: UpdateUserPayload): Promise<User> {
@@ -106,9 +90,7 @@ export async function updateUser(id: string, payload: UpdateUserPayload): Promis
     headers: buildHeaders(true),
     body: JSON.stringify(payload),
   });
-  if (!response.ok) throw new Error("Failed to update user");
-  const json = (await response.json()) as ApiResponse<User>;
-  return json.data;
+  return parseApiResponse<User>(response, "No se pudo actualizar el usuario.");
 }
 
 export async function deleteUser(id: string): Promise<void> {
@@ -116,7 +98,7 @@ export async function deleteUser(id: string): Promise<void> {
     method: "DELETE",
     headers: buildHeaders(false),
   });
-  if (!response.ok) throw new Error("Failed to delete user");
+  await requireApiSuccess(response, "No se pudo eliminar el usuario.");
 }
 
 export async function listRoles(): Promise<RoleOption[]> {
@@ -124,9 +106,7 @@ export async function listRoles(): Promise<RoleOption[]> {
     method: "GET",
     headers: buildHeaders(false),
   });
-  if (!response.ok) throw new Error("Failed to load roles");
-  const json = (await response.json()) as PagedApiResponse<RoleOption>;
-  return json.data;
+  return parseApiResponse<RoleOption[]>(response, "No se pudieron cargar los roles.");
 }
 
 export async function getCurrentUser(): Promise<CurrentUser> {
@@ -134,9 +114,7 @@ export async function getCurrentUser(): Promise<CurrentUser> {
     method: "GET",
     headers: buildHeaders(false),
   });
-  if (!response.ok) throw new Error("Failed to load current user");
-  const json = (await response.json()) as ApiResponse<CurrentUser>;
-  return json.data;
+  return parseApiResponse<CurrentUser>(response, "No se pudo cargar la sesión actual.");
 }
 
 export async function listPermissions(): Promise<Permission[]> {
@@ -144,9 +122,7 @@ export async function listPermissions(): Promise<Permission[]> {
     method: "GET",
     headers: buildHeaders(false),
   });
-  if (!response.ok) throw new Error("Failed to load permissions");
-  const json = (await response.json()) as PagedApiResponse<Permission>;
-  return json.data;
+  return parseApiResponse<Permission[]>(response, "No se pudieron cargar los permisos.");
 }
 
 export async function getUserPermissions(userId: string): Promise<UserPermissions> {
@@ -154,9 +130,7 @@ export async function getUserPermissions(userId: string): Promise<UserPermission
     method: "GET",
     headers: buildHeaders(false),
   });
-  if (!response.ok) throw new Error("Failed to load user permissions");
-  const json = (await response.json()) as ApiResponse<UserPermissions>;
-  return json.data;
+  return parseApiResponse<UserPermissions>(response, "No se pudieron cargar los permisos del usuario.");
 }
 
 export async function replaceUserPermissionOverrides(
@@ -168,9 +142,7 @@ export async function replaceUserPermissionOverrides(
     headers: buildHeaders(true),
     body: JSON.stringify({ overrides }),
   });
-  if (!response.ok) throw new Error("Failed to update permission overrides");
-  const json = (await response.json()) as ApiResponse<UserPermissions>;
-  return json.data;
+  return parseApiResponse<UserPermissions>(response, "No se pudieron actualizar los permisos individuales.");
 }
 
 export async function clearUserPermissionOverrides(userId: string): Promise<UserPermissions> {
@@ -178,7 +150,5 @@ export async function clearUserPermissionOverrides(userId: string): Promise<User
     method: "DELETE",
     headers: buildHeaders(false),
   });
-  if (!response.ok) throw new Error("Failed to clear permission overrides");
-  const json = (await response.json()) as ApiResponse<UserPermissions>;
-  return json.data;
+  return parseApiResponse<UserPermissions>(response, "No se pudieron restablecer los permisos individuales.");
 }

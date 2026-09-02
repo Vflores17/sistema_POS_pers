@@ -17,6 +17,8 @@ import styles from "./Products.module.css";
 import { useNavigate } from "react-router-dom";
 import { usePermissions } from "../auth/PermissionContext";
 import { isAdminAuthorizationCancelled } from "../api/admin-authorizations";
+import ModuleLoadingSkeleton from "../components/ModuleLoadingSkeleton";
+import { isGloballyReportedError } from "../api/errors";
 
 interface ProductFormState {
   name: string;
@@ -51,7 +53,7 @@ export default function Products(): ReactElement {
   const [products, setProducts] = useState<Product[]>([]);
   const [form, setForm] = useState<ProductFormState>(INITIAL_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
 const [modal, setModal] = useState<{
   show: boolean;
@@ -269,6 +271,8 @@ const [modal, setModal] = useState<{
     setEditingId(null);
   }
 
+  if (loading) return <ModuleLoadingSkeleton columns={7} formFields={7} />;
+
   return (
     <div style={{ background: "#f0f4f0", minHeight: "100vh", display: "flex", justifyContent: "center", alignItems: "flex-start", padding: "1rem" }}>
       <section className={styles.container}>
@@ -469,6 +473,7 @@ const [modal, setModal] = useState<{
 }
 
 function readError(error: unknown, fallback: string): string {
+  if (isGloballyReportedError(error)) return "";
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }

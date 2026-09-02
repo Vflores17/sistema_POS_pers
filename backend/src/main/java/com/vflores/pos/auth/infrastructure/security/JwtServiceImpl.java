@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 
 @Service
@@ -39,10 +40,13 @@ public class JwtServiceImpl implements JwtService {
                 .toList();
 
         return Jwts.builder()
+                .issuer(jwtProperties.issuer())
+                .audience().add(jwtProperties.audience()).and()
                 .subject(userDetails.getUsername())
+                .id(UUID.randomUUID().toString())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiration))
-                .claims(Map.of("roles", roles))
+                .claims(Map.of("roles", roles, "token_type", "access"))
                 .signWith(signingKey)
                 .compact();
     }
@@ -71,6 +75,9 @@ public class JwtServiceImpl implements JwtService {
     private <T> T extractClaim(String token, Function<Claims, T> resolver) {
         Claims claims = Jwts.parser()
                 .verifyWith(signingKey)
+                .requireIssuer(jwtProperties.issuer())
+                .requireAudience(jwtProperties.audience())
+                .require("token_type", "access")
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();

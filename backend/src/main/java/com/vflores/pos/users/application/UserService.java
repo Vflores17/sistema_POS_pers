@@ -30,6 +30,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AdministrationGuard administrationGuard;
 
     @Transactional(readOnly = true)
     public Page<UserResponse> findAll(String search, UserStatus status, Pageable pageable) {
@@ -84,6 +85,7 @@ public class UserService {
 
         validateUniqueness(user.getUsername(), request.email(), user.getId());
         Set<Role> roles = fetchRolesOrThrow(request.roleIds());
+        administrationGuard.requireAdministrationAfterUserChange(user, request.status(), roles);
 
         user.setEmail(request.email().trim().toLowerCase());
         user.setFullName(request.fullName().trim());
@@ -95,10 +97,10 @@ public class UserService {
 
     @Transactional
     public void delete(UUID id) {
-        if (!userRepository.existsById(id)) {
-            throw new ResourceNotFoundException("User not found: " + id);
-        }
-        userRepository.deleteById(id);
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + id));
+        administrationGuard.requireAdministrationAfterUserDeletion(user);
+        userRepository.delete(user);
     }
 
     @Transactional
@@ -107,6 +109,7 @@ public class UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
 
         Set<Role> roles = fetchRolesOrThrow(roleIds);
+        administrationGuard.requireAdministrationAfterUserChange(user, user.getStatus(), roles);
         user.setRoles(roles);
         return toResponse(userRepository.save(user));
     }

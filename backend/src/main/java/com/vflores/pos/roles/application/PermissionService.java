@@ -7,6 +7,7 @@ import com.vflores.pos.roles.domain.model.Permission;
 import com.vflores.pos.roles.domain.repository.PermissionRepository;
 import com.vflores.pos.shared.exception.ConflictException;
 import com.vflores.pos.shared.exception.ResourceNotFoundException;
+import com.vflores.pos.users.application.AdministrationGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -22,6 +23,7 @@ import java.util.UUID;
 public class PermissionService {
 
     private final PermissionRepository permissionRepository;
+    private final AdministrationGuard administrationGuard;
 
     @Transactional(readOnly = true)
     public Page<PermissionResponse> findAll(String search, String module, Pageable pageable) {
@@ -81,6 +83,7 @@ public class PermissionService {
         Permission permission = permissionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Permission not found: " + id));
 
+        administrationGuard.requirePermissionIsNotEssential(permission.getCode());
         if (!permission.getRoles().isEmpty()) {
             throw new ConflictException("Cannot delete permission assigned to roles");
         }

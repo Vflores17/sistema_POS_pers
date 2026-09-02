@@ -2,6 +2,7 @@ package com.vflores.pos.shared.exception;
 
 import com.vflores.pos.adminauthorizations.application.AdminAuthorizationRejectedException;
 import com.vflores.pos.adminauthorizations.application.AdminAuthorizationRequiredException;
+import com.vflores.pos.auth.application.AuthenticationRateLimitExceededException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -56,10 +57,22 @@ public class GlobalExceptionHandler {
                 .body(ApiErrorResponse.of("AUTH_INVALID_CREDENTIALS", "Invalid credentials", List.of()));
     }
 
+    @ExceptionHandler(AuthenticationRateLimitExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleAuthenticationRateLimit(
+            AuthenticationRateLimitExceededException ex
+    ) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(ApiErrorResponse.of(
+                        "AUTH_RATE_LIMITED",
+                        "Authentication temporarily unavailable. Try again later",
+                        List.of()
+                ));
+    }
+
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ApiErrorResponse> handleAuthentication(AuthenticationException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiErrorResponse.of("AUTH_UNAUTHORIZED", ex.getMessage(), List.of()));
+                .body(ApiErrorResponse.of("AUTH_INVALID_CREDENTIALS", "Invalid credentials", List.of()));
     }
 
     @ExceptionHandler(AccessDeniedException.class)
@@ -99,7 +112,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({LockedException.class, DisabledException.class})
     public ResponseEntity<ApiErrorResponse> handleDisabledUser(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiErrorResponse.of("AUTH_USER_DISABLED", ex.getMessage(), List.of()));
+                .body(ApiErrorResponse.of("AUTH_INVALID_CREDENTIALS", "Invalid credentials", List.of()));
     }
 
     @ExceptionHandler(Exception.class)

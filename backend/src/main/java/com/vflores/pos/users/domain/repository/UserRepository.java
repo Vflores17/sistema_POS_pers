@@ -1,6 +1,7 @@
 package com.vflores.pos.users.domain.repository;
 
 import com.vflores.pos.users.domain.model.User;
+import com.vflores.pos.users.domain.model.UserStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -30,4 +31,6 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     boolean existsByUsername(String username);
 
     boolean existsByEmail(String email);
+
+    long countByStatusAndRolesId(UserStatus status, UUID roleId);
 }

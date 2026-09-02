@@ -3,6 +3,7 @@ package com.vflores.pos.adminauthorizations.api;
 import com.vflores.pos.adminauthorizations.api.dto.AdminAuthorizationResponse;
 import com.vflores.pos.adminauthorizations.application.AdminAuthorizationService;
 import com.vflores.pos.auth.application.JwtService;
+import com.vflores.pos.auth.application.AuthenticationAttemptLimiter;
 import com.vflores.pos.auth.infrastructure.security.AuthenticatedUser;
 import com.vflores.pos.auth.infrastructure.security.CustomUserDetailsService;
 import com.vflores.pos.auth.infrastructure.security.JwtAuthenticationFilter;
@@ -46,6 +47,14 @@ class AdminAuthorizationControllerTest {
     private CustomUserDetailsService customUserDetailsService;
     @MockBean
     private JwtService jwtService;
+    @MockBean
+    private AuthenticationAttemptLimiter authenticationAttemptLimiter;
+
+    @org.junit.jupiter.api.BeforeEach
+    void prepareRateLimitKey() {
+        when(authenticationAttemptLimiter.adminAuthorizationKey(any(), any(), any()))
+                .thenReturn("admin-test-key");
+    }
 
     @Test
     void authenticatedRequesterCanRequestAuthorization() throws Exception {

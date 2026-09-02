@@ -3,10 +3,11 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import styles from "./Dashboard.module.css";
 import { usePermissions } from "../auth/PermissionContext";
+import SkeletonBlock from "../components/SkeletonBlock";
 
 export default function Dashboard(): ReactElement {
   const navigate = useNavigate();
-  const { hasPermission, clearSession } = usePermissions();
+  const { hasPermission, clearSession, loading } = usePermissions();
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent): void {
@@ -41,6 +42,25 @@ export default function Dashboard(): ReactElement {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [navigate, hasPermission, clearSession]);
+
+  if (loading) {
+    return (
+      <section className={styles.page} aria-label="Cargando dashboard" aria-busy="true">
+        <header className={styles.header}>
+          <SkeletonBlock className={styles.skeletonDate} />
+          <SkeletonBlock className={styles.skeletonTitle} />
+        </header>
+        <div className={styles.menuGrid}>
+          {Array.from({ length: 6 }, (_, index) => (
+            <div className={styles.skeletonMenuItem} key={index}>
+              <SkeletonBlock className={styles.skeletonIcon} />
+              <SkeletonBlock className={styles.skeletonLabel} />
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className={styles.page}>

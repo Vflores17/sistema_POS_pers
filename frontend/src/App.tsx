@@ -9,6 +9,7 @@ import RouteSales from "./pages/RouteSales";
 import Sales from "./pages/Sales";
 import Users from "./pages/Users";
 import PrivateRoute from "./routes/PrivateRoute";
+import NotFound from "./pages/NotFound";
 
 export default function App(): ReactElement {
   return (
@@ -26,10 +27,11 @@ export default function App(): ReactElement {
         <Route element={<PrivateRoute permission="CLIENT_READ" />}><Route path="/clients" element={<Clients />} /></Route>
         <Route element={<PrivateRoute permission="PRODUCT_READ" />}><Route path="/products" element={<Products />} /></Route>
         <Route element={<PrivateRoute permission="USER_READ" />}><Route path="/users" element={<Users />} /></Route>
+        
       </Route>
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    <Route path="*" element={<NotFound />} />
 
     </Routes>
   );

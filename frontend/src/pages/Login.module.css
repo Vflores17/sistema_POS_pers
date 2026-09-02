@@ -1,44 +1,248 @@
 .wrapper {
     min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, #1a5c38 0%, #2d8653 50%, #1a7a5c 100%);
-    padding: 24px;
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: clamp(20px, 4vw, 56px);
+    overflow: hidden;
+    background: #edf3ee;
+    color: #203128;
 }
 
-.card {
-    background: white;
-    border-radius: 20px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    padding: 48px 40px;
-    width: 100%;
-    max-width: 420px;
+.loginShell {
+    width: min(100%, 920px);
+    min-height: 580px;
+    display: grid;
+    grid-template-columns: minmax(300px, 0.88fr) minmax(390px, 1.12fr);
+    overflow: hidden;
+    border: 1px solid #d3ded6;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 26px 70px rgba(32, 63, 42, 0.16);
+    animation: shellEnter 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.botanicalPanel {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+    padding: 42px 38px;
+    background: #315c3c;
+    color: #f5f8f5;
+}
+
+.botanicalPanel::before {
+    content: "";
+    position: absolute;
+    top: -86px;
+    right: -104px;
+    width: 270px;
+    height: 270px;
+    border: 1px solid rgba(224, 237, 226, 0.16);
+    border-radius: 50%;
+}
+
+.botanicalPanel::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.brandMark {
+    position: relative;
+    z-index: 2;
+    width: 44px;
+    height: 44px;
+    border: 1px solid rgba(255, 255, 255, 0.32);
+    border-radius: 6px;
+}
+
+.brandStem {
+    position: absolute;
+    left: 21px;
+    bottom: 9px;
+    width: 2px;
+    height: 25px;
+    background: #dceade;
+    transform: rotate(2deg);
+}
+
+.brandLeaf {
+    position: absolute;
+    width: 14px;
+    height: 9px;
+    border: 1px solid #dceade;
+    border-radius: 100% 0 100% 0;
+}
+
+.brandLeafLeft {
+    top: 15px;
+    left: 8px;
+    transform: rotate(18deg);
+}
+
+.brandLeafRight {
+    top: 9px;
+    right: 7px;
+    border-radius: 0 100% 0 100%;
+    transform: rotate(-13deg);
+}
+
+.botanicalCopy {
+    position: relative;
+    z-index: 2;
+    max-width: 260px;
+    margin: auto 0 225px;
+}
+
+.panelEyebrow {
+    display: block;
+    margin-bottom: 14px;
+    color: #b9d1bd;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.botanicalCopy p {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 650;
+    line-height: 1.2;
+}
+
+.plantScene {
+    position: absolute;
+    right: 16px;
+    bottom: -10px;
+    width: 260px;
+    height: 260px;
+}
+
+.sceneStem {
+    position: absolute;
+    z-index: 1;
+    right: 110px;
+    bottom: 63px;
+    width: 4px;
+    height: 160px;
+    border-radius: 4px;
+    background: #9cba9f;
+    transform: rotate(-6deg);
+    transform-origin: bottom center;
+    animation: stemSway 6.2s ease-in-out infinite;
+}
+
+.sceneLeaf {
+    position: absolute;
+    z-index: 2;
+    width: 72px;
+    height: 40px;
+    border: 1px solid rgba(224, 237, 226, 0.36);
+    border-radius: 100% 0 100% 0;
+    background: #527c5c;
+    transform-origin: 100% 100%;
+}
+
+.sceneLeafOne {
+    top: 35px;
+    left: 56px;
+    transform: rotate(25deg);
+    animation: leafLeft 5.8s ease-in-out infinite;
+}
+
+.sceneLeafTwo {
+    top: 98px;
+    left: 39px;
+    width: 82px;
+    height: 44px;
+    transform: rotate(10deg);
+    animation: leafLeftLow 6.4s ease-in-out 180ms infinite;
+}
+
+.sceneLeafThree {
+    top: 62px;
+    right: 41px;
+    border-radius: 0 100% 0 100%;
+    transform: rotate(-19deg);
+    transform-origin: 0 100%;
+    animation: leafRight 5.5s ease-in-out 100ms infinite;
+}
+
+.sceneLeafFour {
+    top: 126px;
+    right: 21px;
+    width: 80px;
+    height: 43px;
+    border-radius: 0 100% 0 100%;
+    transform: rotate(-4deg);
+    transform-origin: 0 100%;
+    animation: leafRightLow 6s ease-in-out 260ms infinite;
+}
+
+.scenePotRim {
+    position: absolute;
+    z-index: 4;
+    right: 66px;
+    bottom: 57px;
+    width: 100px;
+    height: 15px;
+    border-radius: 3px;
+    background: #bc765a;
+}
+
+.scenePot {
+    position: absolute;
+    z-index: 3;
+    right: 74px;
+    bottom: 2px;
+    width: 84px;
+    height: 61px;
+    background: #a65f48;
+    clip-path: polygon(0 0, 100% 0, 82% 100%, 18% 100%);
+}
+
+.formPanel {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: clamp(42px, 6vw, 72px);
 }
 
 .header {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin-bottom: 36px;
+    margin-bottom: 34px;
 }
 
-.logo {
-    font-size: 56px;
-    margin-bottom: 12px;
-}
-
-.title {
-    font-size: 22px;
-    font-weight: 700;
-    color: #1a5c38;
-    margin-bottom: 4px;
-    text-align: center;
+.mobileMark {
+    display: none;
 }
 
 .subtitle {
-    font-size: 14px;
-    color: #9ca3af;
+    margin: 0 0 12px;
+    color: #4f7559;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.title {
+    margin: 0;
+    color: #203128;
+    font-size: clamp(30px, 4vw, 40px);
+    font-weight: 720;
+    line-height: 1.12;
+    letter-spacing: 0;
+}
+
+.welcome {
+    margin: 13px 0 0;
+    color: #6d776f;
+    font-size: 15px;
+    line-height: 1.55;
 }
 
 .form {
@@ -50,60 +254,216 @@
 .field {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
 }
 
 .label {
+    color: #38463d;
     font-size: 14px;
-    font-weight: 500;
-    color: #4b5563;
+    font-weight: 650;
 }
 
 .input {
-    padding: 12px 16px;
-    border: 2px solid #e5e7eb;
-    border-radius: 12px;
-    font-size: 15px;
-    color: #374151;
-    background: #f9fafb;
-    transition: border-color 0.2s;
+    width: 100%;
+    min-height: 48px;
+    box-sizing: border-box;
+    padding: 11px 14px;
+    border: 1px solid #cbd6ce;
+    border-radius: 6px;
     outline: none;
+    background: #f9fbf9;
+    color: #26352b;
+    font: inherit;
+    font-size: 15px;
+    transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.input::placeholder {
+    color: #99a29b;
+}
+
+.input:hover {
+    border-color: #9faf a3;
 }
 
 .input:focus {
-    border-color: #2d8653;
-    background: white;
+    border-color: #3f704b;
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(63, 112, 75, 0.13);
 }
 
 .error {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    color: #dc2626;
+    position: relative;
+    padding: 11px 13px 11px 37px;
+    border: 1px solid #e3b9b1;
+    border-radius: 6px;
+    background: #fff7f5;
+    color: #9b3e31;
     font-size: 14px;
-    padding: 12px 16px;
-    border-radius: 10px;
+    line-height: 1.45;
+    animation: errorEnter 180ms ease-out both;
+}
+
+.error::before {
+    content: "!";
+    position: absolute;
+    top: 11px;
+    left: 14px;
+    width: 16px;
+    height: 16px;
+    display: grid;
+    place-items: center;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 800;
 }
 
 .button {
-    background: linear-gradient(135deg, #2d8653, #1a7a5c);
-    color: white;
-    font-size: 16px;
-    font-weight: 600;
-    padding: 14px;
-    border: none;
-    border-radius: 12px;
-    cursor: pointer;
-    transition: opacity 0.2s, transform 0.1s;
+    min-height: 48px;
     margin-top: 4px;
+    padding: 12px 20px;
+    border: 1px solid #315c3c;
+    border-radius: 6px;
+    background: #315c3c;
+    color: #ffffff;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
-.button:hover {
-    opacity: 0.92;
-    transform: translateY(-1px);
+.button:hover:not(:disabled) {
+    background: #264b31;
+    box-shadow: 0 9px 20px rgba(38, 75, 49, 0.2);
+    transform: translateY(-2px);
+}
+
+.button:active:not(:disabled) {
+    box-shadow: none;
+    transform: translateY(0) scale(0.99);
+}
+
+.button:focus-visible {
+    outline: 3px solid rgba(49, 92, 60, 0.26);
+    outline-offset: 3px;
 }
 
 .button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
+    cursor: wait;
+    opacity: 0.66;
+}
+
+@keyframes shellEnter {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes errorEnter {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes stemSway {
+    0%, 100% { transform: rotate(-6deg); }
+    50% { transform: rotate(-4deg); }
+}
+
+@keyframes leafLeft {
+    0%, 100% { transform: rotate(25deg); }
+    50% { transform: rotate(28deg) translateY(-2px); }
+}
+
+@keyframes leafLeftLow {
+    0%, 100% { transform: rotate(10deg); }
+    50% { transform: rotate(7deg) translateY(1px); }
+}
+
+@keyframes leafRight {
+    0%, 100% { transform: rotate(-19deg); }
+    50% { transform: rotate(-22deg) translateY(-2px); }
+}
+
+@keyframes leafRightLow {
+    0%, 100% { transform: rotate(-4deg); }
+    50% { transform: rotate(-1deg) translateY(1px); }
+}
+
+@media (max-width: 760px) {
+    .wrapper {
+        padding: 20px;
+    }
+
+    .loginShell {
+        width: min(100%, 470px);
+        min-height: 0;
+        grid-template-columns: 1fr;
+    }
+
+    .botanicalPanel {
+        display: none;
+    }
+
+    .formPanel {
+        padding: 42px 32px 46px;
+    }
+
+    .mobileMark {
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        margin-bottom: 30px;
+        border-radius: 6px;
+        background: #315c3c;
+    }
+
+    .mobileMark span {
+        width: 18px;
+        height: 12px;
+        border: 1px solid #e4eee6;
+        border-radius: 100% 0 100% 0;
+        transform: rotate(30deg);
+    }
+}
+
+@media (max-width: 420px) {
+    .wrapper {
+        padding: 12px;
+    }
+
+    .formPanel {
+        padding: 34px 22px 38px;
+    }
+
+    .header {
+        margin-bottom: 28px;
+    }
+
+    .title {
+        font-size: 29px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .loginShell,
+    .error,
+    .sceneStem,
+    .sceneLeafOne,
+    .sceneLeafTwo,
+    .sceneLeafThree,
+    .sceneLeafFour {
+        animation: none;
+    }
+
+    .input,
+    .button {
+        transition: none;
+    }
+
+    .button:hover:not(:disabled),
+    .button:active:not(:disabled) {
+        transform: none;
+    }
 }

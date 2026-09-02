@@ -1,5 +1,6 @@
 import { API_URL, buildHeaders, fetchWithAuth  } from "./http";
 import { executeWithAdminAuthorization } from "./admin-authorizations";
+import { parseApiResponse, requireApiSuccess } from "./errors";
 
 export type PaymentMethod = "CASH" | "SINPE" | "TRANSFER" | "CARD";
 export type SaleStatus = "PENDING" | "PARTIAL" | "PAID" | "CANCELLED";
@@ -55,39 +56,12 @@ export interface CreateSalePaymentPayload {
   amount: number;
 }
 
-interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-  message?: string;
-}
-
-
-
-async function parseResponse<T>(response: Response, fallback: string): Promise<T> {
-  if (!response.ok) {
-    let message = fallback;
-    try {
-      const body = (await response.json()) as {
-        error?: { message?: string };
-        errors?: Array<{ message?: string }>;
-      };
-      if (body.error?.message) message = body.error.message;
-      else if (body.errors?.[0]?.message) message = body.errors[0].message;
-    } catch {
-      message = fallback;
-    }
-    throw new Error(message);
-  }
-  const json = (await response.json()) as ApiResponse<T>;
-  return json.data;
-}
-
 export async function listSales(): Promise<Sale[]> {
   const response = await fetchWithAuth(`${API_URL}/sales`, {
     method: "GET",
     headers: buildHeaders(false),
   });
-  return parseResponse<Sale[]>(response, "Failed to load sales");
+  return parseApiResponse<Sale[]>(response, "No se pudieron cargar las ventas.");
 }
 
 export async function getSaleById(id: string): Promise<Sale> {
@@ -95,7 +69,7 @@ export async function getSaleById(id: string): Promise<Sale> {
     method: "GET",
     headers: buildHeaders(false),
   });
-  return parseResponse<Sale>(response, "Failed to load sale");
+  return parseApiResponse<Sale>(response, "No se pudo cargar la venta.");
 }
 
 export async function getNextInvoiceNumber(): Promise<number> {
@@ -103,7 +77,7 @@ export async function getNextInvoiceNumber(): Promise<number> {
     method: "GET",
     headers: buildHeaders(false),
   });
-  return parseResponse<number>(response, "Failed to get next invoice number");
+  return parseApiResponse<number>(response, "No se pudo obtener el próximo número de factura.");
 }
 
 export async function createSale(payload: CreateSalePayload): Promise<Sale> {
@@ -112,7 +86,7 @@ export async function createSale(payload: CreateSalePayload): Promise<Sale> {
     headers: buildHeaders(true),
     body: JSON.stringify(payload),
   });
-  return parseResponse<Sale>(response, "Failed to create sale");
+  return parseApiResponse<Sale>(response, "No se pudo crear la venta.");
 }
 
 export async function updateSale(id: string, payload: UpdateSalePayload): Promise<Sale> {
@@ -124,7 +98,7 @@ export async function updateSale(id: string, payload: UpdateSalePayload): Promis
       body: JSON.stringify(payload),
     }),
   );
-  return parseResponse<Sale>(response, "Failed to update sale");
+  return parseApiResponse<Sale>(response, "No se pudo actualizar la venta.");
 }
 
 export async function deleteSale(id: string): Promise<void> {
@@ -132,7 +106,7 @@ export async function deleteSale(id: string): Promise<void> {
     method: "DELETE",
     headers: buildHeaders(false),
   });
-  if (!response.ok) throw new Error("Failed to delete sale");
+  await requireApiSuccess(response, "No se pudo eliminar la venta.");
 }
 
 export async function changeSaleStatus(id: string, status: SaleStatus): Promise<Sale> {
@@ -147,7 +121,7 @@ export async function changeSaleStatus(id: string, status: SaleStatus): Promise<
         request,
       )
     : await request();
-  return parseResponse<Sale>(response, "Failed to update sale status");
+  return parseApiResponse<Sale>(response, "No se pudo actualizar el estado de la venta.");
 }
 
 export async function savePayments(
@@ -159,5 +133,5 @@ export async function savePayments(
     headers: buildHeaders(true),
     body: JSON.stringify(payments),
   });
-  return parseResponse<Sale>(response, "Failed to save sale payments");
+  return parseApiResponse<Sale>(response, "No se pudieron guardar los pagos de la venta.");
 }

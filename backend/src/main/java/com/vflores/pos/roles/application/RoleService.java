@@ -9,6 +9,7 @@ import com.vflores.pos.roles.domain.repository.PermissionRepository;
 import com.vflores.pos.roles.domain.repository.RoleRepository;
 import com.vflores.pos.shared.exception.ConflictException;
 import com.vflores.pos.shared.exception.ResourceNotFoundException;
+import com.vflores.pos.users.application.AdministrationGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -27,6 +28,7 @@ public class RoleService {
 
     private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
+    private final AdministrationGuard administrationGuard;
 
     @Transactional(readOnly = true)
     public Page<RoleResponse> findAll(String search, Boolean active, Pageable pageable) {
@@ -74,6 +76,7 @@ public class RoleService {
         Role role = roleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + id));
 
+        administrationGuard.requireAdministrationAfterRoleUpdate(role, request.active());
         role.setDescription(normalizeDescription(request.description()));
         role.setActive(request.active());
         return toResponse(roleRepository.save(role));
@@ -102,6 +105,7 @@ public class RoleService {
             throw new ResourceNotFoundException("One or more permission IDs do not exist");
         }
 
+        administrationGuard.requireEssentialAdminPermissions(role, permissions);
         role.setPermissions(permissions);
         return toResponse(roleRepository.save(role));
     }

@@ -1,5 +1,6 @@
 import { API_URL, buildHeaders, fetchWithAuth  } from "./http";
 import { executeWithAdminAuthorization } from "./admin-authorizations";
+import { parseApiResponse, requireApiSuccess } from "./errors";
 
 export type ProductStatus = "ACTIVE" | "INACTIVE";
 
@@ -22,26 +23,12 @@ export interface ProductPayload {
   status: ProductStatus;
 }
 
-interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-  message?: string;
-}
-
-interface PagedApiResponse<T> {
-  success: boolean;
-  data: T[];
-  message?: string;
-}
-
 export async function listProducts(): Promise<Product[]> {
   const response = await fetchWithAuth(`${API_URL}/products?all=true`, {
     method: "GET",
     headers: buildHeaders(false),
   });
-  if (!response.ok) throw new Error("Failed to load products");
-  const json = (await response.json()) as PagedApiResponse<Product>;
-  return json.data;
+  return parseApiResponse<Product[]>(response, "No se pudieron cargar los productos.");
 }
 
 export async function createProduct(payload: ProductPayload): Promise<Product> {
@@ -50,9 +37,7 @@ export async function createProduct(payload: ProductPayload): Promise<Product> {
     headers: buildHeaders(true),
     body: JSON.stringify(payload),
   });
-  if (!response.ok) throw new Error("Failed to create product");
-  const json = (await response.json()) as ApiResponse<Product>;
-  return json.data;
+  return parseApiResponse<Product>(response, "No se pudo crear el producto.");
 }
 
 export async function updateProduct(id: string, payload: ProductPayload): Promise<Product> {
@@ -64,9 +49,7 @@ export async function updateProduct(id: string, payload: ProductPayload): Promis
       body: JSON.stringify(payload),
     }),
   );
-  if (!response.ok) throw new Error("Failed to update product");
-  const json = (await response.json()) as ApiResponse<Product>;
-  return json.data;
+  return parseApiResponse<Product>(response, "No se pudo actualizar el producto.");
 }
 
 export async function deleteProduct(id: string): Promise<void> {
@@ -74,16 +57,7 @@ export async function deleteProduct(id: string): Promise<void> {
     method: "DELETE",
     headers: buildHeaders(false),
   });
-  if (!response.ok) {
-    let message = "Failed to delete product";
-    try {
-      const body = await response.json() as { error?: { message?: string } };
-      if (body.error?.message) message = body.error.message;
-    } catch {
-      // usar mensaje genérico
-    }
-    throw new Error(message);
-  }
+  await requireApiSuccess(response, "No se pudo eliminar el producto.");
 }
 
 export async function createProductPrice(
@@ -96,7 +70,7 @@ export async function createProductPrice(
     headers: buildHeaders(true),
     body: JSON.stringify({ type, price }),
   });
-  if (!response.ok) throw new Error("Failed to create product price");
+  await requireApiSuccess(response, "No se pudo crear el precio del producto.");
 }
 
 export async function getProductPrices(productId: string): Promise<{ id: string; type: string; price: number }[]> {
@@ -104,9 +78,10 @@ export async function getProductPrices(productId: string): Promise<{ id: string;
     method: "GET",
     headers: buildHeaders(false),
   });
-  if (!response.ok) throw new Error("Failed to load product prices");
-  const json = await response.json();
-  return json.data;
+  return parseApiResponse<{ id: string; type: string; price: number }[]>(
+    response,
+    "No se pudieron cargar los precios del producto.",
+  );
 }
 
 export async function updateProductPrice(
@@ -120,7 +95,7 @@ export async function updateProductPrice(
     headers: buildHeaders(true),
     body: JSON.stringify({ type, price }),
   });
-  if (!response.ok) throw new Error("Failed to update product price");
+  await requireApiSuccess(response, "No se pudo actualizar el precio del producto.");
 }
 
 export async function getAllProductPrices(): Promise<Record<string, { id: string; type: string; price: number }[]>> {
@@ -128,7 +103,8 @@ export async function getAllProductPrices(): Promise<Record<string, { id: string
     method: "GET",
     headers: buildHeaders(false),
   });
-  if (!response.ok) throw new Error("Failed to load all prices");
-  const json = await response.json();
-  return json.data;
+  return parseApiResponse<Record<string, { id: string; type: string; price: number }[]>>(
+    response,
+    "No se pudieron cargar los precios de los productos.",
+  );
 }

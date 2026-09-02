@@ -20,6 +20,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.UUID;
 import java.util.Locale;
 import java.util.Set;
@@ -28,6 +33,9 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class AuthService {
+
+    private static final int REFRESH_TOKEN_BYTES = 32;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
@@ -44,7 +52,7 @@ public class AuthService {
             authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.username(), request.password())
             );
-        } catch (BadCredentialsException ex) {
+        } catch (org.springframework.security.core.AuthenticationException ex) {
             throw new BadCredentialsException("Invalid credentials");
         }
 
@@ -60,7 +68,7 @@ public class AuthService {
 
     @Transactional
     public LoginResponse refresh(RefreshTokenRequest request) {
-        RefreshToken currentToken = refreshTokenRepository.findByToken(request.refreshToken())
+        RefreshToken currentToken = refreshTokenRepository.findByTokenHashForUpdate(hashToken(request.refreshToken()))
                 .orElseThrow(() -> new BadCredentialsException("Invalid refresh token"));
 
         if (currentToken.isRevoked()) {
@@ -82,7 +90,7 @@ public class AuthService {
 
     @Transactional
     public void logout(RefreshTokenRequest request) {
-        RefreshToken refreshToken = refreshTokenRepository.findByToken(request.refreshToken())
+        RefreshToken refreshToken = refreshTokenRepository.findByTokenHashForUpdate(hashToken(request.refreshToken()))
                 .orElseThrow(() -> new BadCredentialsException("Invalid refresh token"));
 
         refreshTokenRepository.revokeAllByUserId(refreshToken.getUser().getId());
@@ -109,14 +117,33 @@ public class AuthService {
     }
 
     private String createRefreshToken(User user) {
-        String value = UUID.randomUUID() + "." + UUID.randomUUID();
+        String value = generateRefreshToken();
         RefreshToken token = RefreshToken.builder()
-                .token(value)
+                .tokenHash(hashToken(value))
                 .user(user)
                 .expiresAt(OffsetDateTime.now().plusSeconds(jwtProperties.refreshTokenExpirationSeconds()))
                 .revoked(false)
                 .build();
         refreshTokenRepository.save(token);
         return value;
+    }
+
+    private String generateRefreshToken() {
+        byte[] bytes = new byte[REFRESH_TOKEN_BYTES];
+        SECURE_RANDOM.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private String hashToken(String token) {
+        if (token == null || token.isBlank()) {
+            throw new BadCredentialsException("Invalid refresh token");
+        }
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(token.getBytes(StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is unavailable", ex);
+        }
     }
 }

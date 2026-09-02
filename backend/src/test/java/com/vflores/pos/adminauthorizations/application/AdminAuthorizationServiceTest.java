@@ -17,7 +17,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
@@ -121,7 +120,8 @@ class AdminAuthorizationServiceTest {
         prepareAuthenticatedApprover(nonAdmin);
 
         assertThatThrownBy(() -> service.issue(REQUESTER_ID, request("SALE_UPDATE", "SALE")))
-                .isInstanceOf(AccessDeniedException.class);
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessage("Invalid credentials");
     }
 
     @Test
@@ -139,7 +139,8 @@ class AdminAuthorizationServiceTest {
         when(effectivePermissionService.resolve(admin)).thenReturn(resolution(Set.of("SALE_READ")));
 
         assertThatThrownBy(() -> service.issue(REQUESTER_ID, request("SALE_UPDATE", "SALE")))
-                .isInstanceOf(AccessDeniedException.class);
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessage("Invalid credentials");
     }
 
     @Test

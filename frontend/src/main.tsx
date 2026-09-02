@@ -5,11 +5,14 @@ import "./index.css";
 import App from "./App";
 import { PermissionProvider } from "./auth/PermissionContext";
 import { AdminAuthorizationProvider } from "./auth/AdminAuthorizationContext";
+import { GlobalErrorProvider } from "./auth/GlobalErrorContext";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
-      <PermissionProvider><AdminAuthorizationProvider><App /></AdminAuthorizationProvider></PermissionProvider>
+      <GlobalErrorProvider>
+        <PermissionProvider><AdminAuthorizationProvider><App /></AdminAuthorizationProvider></PermissionProvider>
+      </GlobalErrorProvider>
     </BrowserRouter>
   </StrictMode>,
 );

@@ -14,6 +14,8 @@ import styles from "./Clients.module.css";
 import { useNavigate } from "react-router-dom";
 import { usePermissions } from "../auth/PermissionContext";
 import { isAdminAuthorizationCancelled } from "../api/admin-authorizations";
+import ModuleLoadingSkeleton from "../components/ModuleLoadingSkeleton";
+import { isGloballyReportedError } from "../api/errors";
 
 interface ClientFormState {
   name: string;
@@ -38,7 +40,7 @@ export default function Clients(): ReactElement {
   const [clients, setClients] = useState<Client[]>([]);
   const [form, setForm] = useState<ClientFormState>(INITIAL_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
   const [search, setSearch] = useState<string>("");
   const [page, setPage] = useState<number>(1);
@@ -183,6 +185,8 @@ const [modal, setModal] = useState<{
     setForm(INITIAL_FORM);
     setEditingId(null);
   }
+
+  if (loading) return <ModuleLoadingSkeleton columns={5} formFields={4} />;
 
   return (
     <div style={{ background: "#f0f4f0", minHeight: "100vh", display: "flex", justifyContent: "center", alignItems: "flex-start", padding: "1rem" }}>
@@ -348,6 +352,7 @@ const [modal, setModal] = useState<{
 }
 
 function readError(error: unknown, fallback: string): string {
+  if (isGloballyReportedError(error)) return "";
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }

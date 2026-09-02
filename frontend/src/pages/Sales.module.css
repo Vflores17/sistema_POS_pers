@@ -592,3 +592,140 @@ kbd {
   background: #f9fafb;
   color: #374151;
 }
+
+.skeletonPage {
+  height: 100vh;
+  padding: 0.5rem;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  background: #f0f4f0;
+}
+
+.skeletonHeading {
+  width: 145px;
+  height: 20px;
+  border-radius: 4px;
+  background: #4b5563;
+}
+
+.skeletonDate {
+  width: 92px;
+  height: 14px;
+  border-radius: 4px;
+  background: #4b5563;
+}
+
+.skeletonFilters {
+  display: flex;
+  gap: 1rem;
+  min-height: 72px;
+  padding: 0.75rem 1.25rem;
+  align-items: flex-end;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.skeletonField {
+  width: 132px;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.skeletonFieldLabel {
+  width: 58px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.skeletonControl {
+  height: 32px;
+  border-radius: 6px;
+}
+
+.skeletonButton {
+  width: 76px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.skeletonTableWrap {
+  flex: 1;
+  padding: 0 1.25rem;
+  overflow: hidden;
+  background: #fff;
+}
+
+.skeletonTableHeader,
+.skeletonTableRow {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(90px, 1fr));
+  align-items: center;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.skeletonTableHeader {
+  min-height: 43px;
+  background: #f9fafb;
+}
+
+.skeletonTableRow {
+  min-height: 48px;
+}
+
+.skeletonTableHeader > span {
+  width: 62%;
+  height: 12px;
+  margin: auto;
+  border-radius: 3px;
+}
+
+.skeletonTableRow > span {
+  height: 14px;
+  margin: auto;
+  border-radius: 4px;
+}
+
+.skeletonBottomBar {
+  min-height: 62px;
+  padding: 0.75rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  background: #1f2937;
+}
+
+.skeletonBottomBar > div {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.skeletonBottomBar span {
+  width: 74px;
+  height: 31px;
+  border-radius: 8px;
+  background: #4b5563;
+}
+
+@media (max-width: 800px) {
+  .skeletonFilters {
+    flex-wrap: wrap;
+  }
+
+  .skeletonField {
+    flex: 1 1 120px;
+  }
+
+  .skeletonTableHeader,
+  .skeletonTableRow {
+    grid-template-columns: repeat(6, minmax(110px, 1fr));
+    min-width: 720px;
+  }
+
+  .skeletonBottomBar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

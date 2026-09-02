@@ -30,6 +30,8 @@ import * as XLSX from "xlsx";
 import FacturaPDF from "../components/FacturaPDF";
 import { usePermissions } from "../auth/PermissionContext";
 import { isAdminAuthorizationCancelled } from "../api/admin-authorizations";
+import { isGloballyReportedError, notifyGlobalError } from "../api/errors";
+import SkeletonBlock from "../components/SkeletonBlock";
 
 type SortBy = "invoiceNumber" | "createdAt" | "client" | "total";
 type StatusFilter = "ALL" | SaleStatus;
@@ -954,10 +956,9 @@ function onPaymentRemoveAmount(method: PaymentMethod, index: number): void {
       if (!match) throw new Error("No existe precio para el tipo de cliente.");
       return String(match.price);
     } catch (error) {
-      console.error(
-        "error en getProductPrices:",
-        error instanceof Error ? error.message : error,
-      );
+      if (!isGloballyReportedError(error)) {
+        notifyGlobalError(readError(error, "No se pudo obtener el precio del producto."));
+      }
       throw error;
     }
   }
@@ -1416,6 +1417,7 @@ function onPaymentRemoveAmount(method: PaymentMethod, index: number): void {
       });
     } catch (err) {
       if (isAdminAuthorizationCancelled(err)) return;
+      if (isGloballyReportedError(err)) return;
       setModal({
         show: true,
         type: "error",
@@ -1477,7 +1479,42 @@ function onPaymentRemoveAmount(method: PaymentMethod, index: number): void {
   }
 
   if (loading) {
-    return <section className={styles.page}>Cargando ventas...</section>;
+    return (
+      <div className={styles.skeletonPage} aria-label="Cargando ventas" aria-busy="true">
+        <section className={styles.container}>
+          <header className={styles.header}>
+            <SkeletonBlock className={styles.skeletonHeading} />
+            <SkeletonBlock className={styles.skeletonDate} />
+          </header>
+          <div className={styles.skeletonFilters}>
+            {Array.from({ length: 5 }, (_, index) => (
+              <div className={styles.skeletonField} key={index}>
+                <SkeletonBlock className={styles.skeletonFieldLabel} />
+                <SkeletonBlock className={styles.skeletonControl} />
+              </div>
+            ))}
+            <SkeletonBlock className={styles.skeletonButton} />
+            <SkeletonBlock className={styles.skeletonButton} />
+          </div>
+          <div className={styles.skeletonTableWrap}>
+            <div className={styles.skeletonTableHeader}>
+              {Array.from({ length: 6 }, (_, index) => <SkeletonBlock key={index} />)}
+            </div>
+            {Array.from({ length: 8 }, (_, row) => (
+              <div className={styles.skeletonTableRow} key={row}>
+                {Array.from({ length: 6 }, (_, column) => (
+                  <SkeletonBlock key={column} style={{ width: column === 2 ? "78%" : "62%" }} />
+                ))}
+              </div>
+            ))}
+          </div>
+          <div className={styles.skeletonBottomBar}>
+            <div>{Array.from({ length: 6 }, (_, index) => <SkeletonBlock key={index} />)}</div>
+            <div>{Array.from({ length: 3 }, (_, index) => <SkeletonBlock key={index} />)}</div>
+          </div>
+        </section>
+      </div>
+    );
   }
 
   if (isFormScreen) {
@@ -2345,8 +2382,10 @@ function onPaymentRemoveAmount(method: PaymentMethod, index: number): void {
                           onConfirm: closeModal,
                           confirmLabel: "Aceptar",
                         });
-                      } catch {
-                        setError("No se pudo crear el producto.");
+                      } catch (error) {
+                        if (!isGloballyReportedError(error)) {
+                          setError("No se pudo crear el producto.");
+                        }
                       }
                     }}
                   >
@@ -3605,26 +3644,32 @@ function onPaymentRemoveAmount(method: PaymentMethod, index: number): void {
     </div>
   `;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const html2pdf = (window as any).html2pdf;
-    html2pdf()
-      .set({
-        margin: 0,
-        filename: `...`,
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
-        pagebreak: { mode: ["avoid-all", "css", "legacy"] }, // 👈 agregar
-      })
-      .from(html)
-      .save()
-      .then(() => {
-        const phoneFormatted = whatsappModal.telefono.replace(/\D/g, "");
-        window.open(
-          `https://wa.me/506${phoneFormatted}?text=${encodeURIComponent(whatsappModal.mensaje)}`,
-          "_blank",
-        );
-      });
+    const clientName = (client?.name ?? "Cliente")
+  .replace(/[\\/:*?"<>|]/g, "")
+  .trim();
+
+const html2pdf = (window as any).html2pdf;
+
+html2pdf()
+  .set({
+    margin: 0,
+    filename: `${clientName}_#${sale.invoiceNumber}.pdf`,
+    image: { type: "jpeg", quality: 0.98 },
+    html2canvas: { scale: 2 },
+    jsPDF: { unit: "mm", format: "letter", orientation: "portrait" },
+    pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+  })
+  .from(html)
+  .save()
+  .then(() => {
+    const phoneFormatted = whatsappModal.telefono.replace(/\D/g, "");
+    window.open(
+      `https://wa.me/506${phoneFormatted}?text=${encodeURIComponent(
+        whatsappModal.mensaje,
+      )}`,
+      "_blank",
+    );
+  });
   }
 }
 
@@ -3652,6 +3697,7 @@ function mapStatus(status: SaleStatus): string {
 }
 
 function readError(error: unknown, fallback: string): string {
+  if (isGloballyReportedError(error)) return "";
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }

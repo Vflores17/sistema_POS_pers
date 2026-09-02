@@ -228,6 +228,13 @@ class AdministrativeAuthorizationTest {
     }
 
     @Test
+    @WithMockUser
+    void undeclaredEndpointIsDeniedByDefault() throws Exception {
+        mockMvc.perform(get("/api/v1/undeclared-endpoint"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     @WithMockUser(authorities = {"ROLE_ADMIN", "USER_READ", "USER_CREATE", "USER_UPDATE", "USER_DELETE",
             "USER_ASSIGN_ROLE", "USER_ASSIGN_PERMISSION", "ROLE_READ", "ROLE_CREATE", "ROLE_UPDATE",
             "ROLE_DELETE", "ROLE_ASSIGN_PERMISSION", "PERMISSION_READ", "PERMISSION_CREATE",

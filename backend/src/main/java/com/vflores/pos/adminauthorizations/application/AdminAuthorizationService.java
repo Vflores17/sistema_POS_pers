@@ -158,10 +158,10 @@ public class AdminAuthorizationService {
         boolean activeAdmin = approver.getStatus() == UserStatus.ACTIVE
                 && approver.getRoles().stream().anyMatch(this::isActiveAdminRole);
         if (!activeAdmin) {
-            throw new AccessDeniedException("Administrator approval required");
+            throw new BadCredentialsException("Invalid credentials");
         }
         if (!effectivePermissionService.resolve(approver).effective().contains(permissionCode)) {
-            throw new AccessDeniedException("Administrator lacks required permission");
+            throw new BadCredentialsException("Invalid credentials");
         }
     }
 

@@ -10,6 +10,9 @@ import {
   type RoleOption, type UpdateUserPayload, type User, type UserPermissions, type UserStatus,
 } from "../api/users";
 import styles from "./Users.module.css";
+import ModuleLoadingSkeleton from "../components/ModuleLoadingSkeleton";
+import SkeletonBlock from "../components/SkeletonBlock";
+import { isGloballyReportedError } from "../api/errors";
 
 interface UserFormState {
   username: string;
@@ -47,7 +50,7 @@ export default function Users(): ReactElement {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [permissionInfo, setPermissionInfo] = useState<UserPermissions | null>(null);
   const [choices, setChoices] = useState<Record<string, OverrideChoice>>({});
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [loadingPermissions, setLoadingPermissions] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -233,6 +236,8 @@ export default function Users(): ReactElement {
     return editingId && permissionInfo ? inherited(code) : null;
   }
 
+  if (loading) return <ModuleLoadingSkeleton columns={6} formFields={6} />;
+
   return (
     <div className={styles.pageShell}>
       <section className={styles.container}>
@@ -257,7 +262,13 @@ export default function Users(): ReactElement {
                   <button className={`${styles.button} ${styles.secondary}`} type="button" onClick={() => void resetAllOverrides()} disabled={loadingPermissions}>Restablecer todos</button>
                 </div>
                 <div className={styles.legend}><span>Heredado por rol</span><span>ALLOW explícito</span><span>DENY explícito</span><span>Efectivo final</span></div>
-                {loadingPermissions ? <p className={styles.empty}>Cargando permisos...</p> : (
+                {loadingPermissions ? (
+                  <div aria-label="Cargando permisos" aria-busy="true" style={{ display: "grid", gap: "0.55rem" }}>
+                    {Array.from({ length: 5 }, (_, index) => (
+                      <SkeletonBlock key={index} style={{ height: 54, borderRadius: 6 }} />
+                    ))}
+                  </div>
+                ) : (
                   <div className={styles.permissionGroups}>{groupedPermissions.map((group) => (
                     <section className={styles.permissionGroup} key={group.code}>
                       <h4>{group.label}</h4>
@@ -298,5 +309,6 @@ function Field({ label, children }: { label: string; children: ReactElement }): 
 }
 
 function readError(error: unknown, fallback: string): string {
+  if (isGloballyReportedError(error)) return "";
   return error instanceof Error && error.message.trim() ? error.message : fallback;
 }

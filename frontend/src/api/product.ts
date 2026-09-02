@@ -1,4 +1,5 @@
 import { API_URL, fetchWithAuth  } from "./http";
+import { parseApiResponse } from "./errors";
 
 export async function getProducts() {
     const token = localStorage.getItem("token");
@@ -9,11 +10,7 @@ export async function getProducts() {
         }
     });
 
-    if (!response.ok) {
-        throw new Error("Error fetching products");
-    }
-
-    return response.json();
+    return parseApiResponse(response, "No se pudieron cargar los productos.");
 
     
 }

@@ -1,5 +1,6 @@
 import { API_URL, buildHeaders, fetchWithAuth } from "./http";
 import { executeWithAdminAuthorization } from "./admin-authorizations";
+import { parseApiResponse, requireApiSuccess } from "./errors";
 
 export type ClientType = "DETAIL" | "WHOLESALE" | "NEW";
 export type ClientStatus = "ACTIVE" | "INACTIVE";
@@ -21,26 +22,13 @@ export interface ClientPayload {
   status: ClientStatus;
 }
 
-interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-  message?: string;
-}
-
-interface PagedApiResponse<T> {
-  success: boolean;
-  data: T[];
-  message?: string;
-}
-
 export async function listClients(): Promise<Client[]> {
   const response = await fetchWithAuth(`${API_URL}/clients?all=true`, {
     method: "GET",
     headers: buildHeaders(false),
   });
-  if (!response.ok) throw new Error("Failed to load clients");
-  const json = (await response.json()) as PagedApiResponse<Client>;
-  return json.data.map((client) => ({
+  const clients = await parseApiResponse<Client[]>(response, "No se pudieron cargar los clientes.");
+  return clients.map((client) => ({
     ...client,
     status: client.status ?? "ACTIVE",
   }));
@@ -52,9 +40,8 @@ export async function createClient(payload: ClientPayload): Promise<Client> {
     headers: buildHeaders(true),
     body: JSON.stringify(payload),
   });
-  if (!response.ok) throw new Error("Failed to create client");
-  const json = (await response.json()) as ApiResponse<Client>;
-  return { ...json.data, status: json.data.status ?? "ACTIVE" };
+  const client = await parseApiResponse<Client>(response, "No se pudo crear el cliente.");
+  return { ...client, status: client.status ?? "ACTIVE" };
 }
 
 export async function updateClient(id: string, payload: ClientPayload): Promise<Client> {
@@ -66,9 +53,8 @@ export async function updateClient(id: string, payload: ClientPayload): Promise<
       body: JSON.stringify(payload),
     }),
   );
-  if (!response.ok) throw new Error("Failed to update client");
-  const json = (await response.json()) as ApiResponse<Client>;
-  return { ...json.data, status: json.data.status ?? "ACTIVE" };
+  const client = await parseApiResponse<Client>(response, "No se pudo actualizar el cliente.");
+  return { ...client, status: client.status ?? "ACTIVE" };
 }
 
 export async function deleteClient(id: string): Promise<void> {
@@ -76,5 +62,5 @@ export async function deleteClient(id: string): Promise<void> {
     method: "DELETE",
     headers: buildHeaders(false),
   });
-  if (!response.ok) throw new Error("Failed to delete client");
+  await requireApiSuccess(response, "No se pudo eliminar el cliente.");
 }
