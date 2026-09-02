@@ -1,16 +1,20 @@
 package com.vflores.pos.routesales.api;
 
+import com.vflores.pos.adminauthorizations.application.AdminAuthorizedOperationExecutor;
 import com.vflores.pos.routesales.api.dto.CreateRouteSalePaymentRequest;
 import com.vflores.pos.routesales.api.dto.CreateRouteSaleRequest;
 import com.vflores.pos.routesales.api.dto.RouteSaleResponse;
 import com.vflores.pos.routesales.api.dto.UpdateRouteSaleRequest;
 import com.vflores.pos.routesales.api.dto.UpdateRouteSaleStatusRequest;
 import com.vflores.pos.routesales.application.RouteSaleService;
+import com.vflores.pos.routesales.api.security.RouteSaleStatusAuthorization;
 import com.vflores.pos.shared.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -19,6 +23,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -30,6 +35,8 @@ import java.util.UUID;
 public class RouteSaleController {
 
     private final RouteSaleService routeSaleService;
+    private final RouteSaleStatusAuthorization routeSaleStatusAuthorization;
+    private final AdminAuthorizedOperationExecutor adminAuthorizedOperationExecutor;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<RouteSaleResponse>>> findAll() {
@@ -49,9 +56,15 @@ public class RouteSaleController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<RouteSaleResponse>> update(
             @PathVariable UUID id,
-            @Valid @RequestBody UpdateRouteSaleRequest request
+            @Valid @RequestBody UpdateRouteSaleRequest request,
+            @RequestHeader(value = "X-Admin-Authorization", required = false) String adminAuthorization,
+            Authentication authentication
     ) {
-        return ResponseEntity.ok(ApiResponse.ok(routeSaleService.update(id, request)));
+        RouteSaleResponse response = adminAuthorizedOperationExecutor.execute(
+                authentication, "ROUTE_UPDATE", "ROUTE_UPDATE", "ROUTE", id, adminAuthorization,
+                () -> routeSaleService.update(id, request)
+        );
+        return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
     @DeleteMapping("/{id}")
@@ -76,8 +89,12 @@ public class RouteSaleController {
     @PatchMapping("/{id}/status")
     public ResponseEntity<ApiResponse<RouteSaleResponse>> updateStatus(
             @PathVariable UUID id,
-            @RequestBody UpdateRouteSaleStatusRequest request
+            @RequestBody UpdateRouteSaleStatusRequest request,
+            Authentication authentication
     ) {
+        if (!routeSaleStatusAuthorization.canChangeStatus(authentication, request)) {
+            throw new AccessDeniedException("You do not have permission for this action");
+        }
         return ResponseEntity.ok(ApiResponse.ok(routeSaleService.updateStatus(id, request.status())));
     }
 }

@@ -1,7 +1,9 @@
 package com.vflores.pos.auth.infrastructure.security;
 
-import com.vflores.pos.roles.domain.model.Permission;
+import com.vflores.pos.auth.application.EffectivePermissionService;
 import com.vflores.pos.roles.domain.model.Role;
+import com.vflores.pos.users.domain.model.User;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
@@ -13,22 +15,25 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Component
+@RequiredArgsConstructor
 public class SecurityAuthorityMapper {
 
-    public Set<GrantedAuthority> mapAuthorities(Collection<Role> roles) {
+    private final EffectivePermissionService effectivePermissionService;
+
+    public Set<GrantedAuthority> mapAuthorities(User user) {
         Set<GrantedAuthority> authorities = new LinkedHashSet<>();
 
-        for (Role role : roles) {
+        for (Role role : user.getRoles()) {
             if (!role.isActive()) {
                 continue;
             }
 
             authorities.add(new SimpleGrantedAuthority("ROLE_" + normalize(role.getName())));
-
-            for (Permission permission : role.getPermissions()) {
-                authorities.add(new SimpleGrantedAuthority(normalize(permission.getCode())));
-            }
         }
+
+        effectivePermissionService.resolve(user).effective().stream()
+                .map(SimpleGrantedAuthority::new)
+                .forEach(authorities::add);
 
         return authorities;
     }

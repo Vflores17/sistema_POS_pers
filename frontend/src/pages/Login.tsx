@@ -2,6 +2,7 @@ import { useState } from "react";
 import { login } from "../api/auth";
 import { useNavigate } from "react-router-dom";
 import styles from "./Login.module.css";
+import { usePermissions } from "../auth/PermissionContext";
 
 function Login() {
     const [username, setUsername] = useState("");
@@ -9,6 +10,7 @@ function Login() {
     const [error, setError] = useState(false);
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
+    const { reloadPermissions } = usePermissions();
 
     const handleLogin = async () => {
         setError(false);
@@ -16,6 +18,8 @@ function Login() {
         try {
             const data = await login(username, password);
             localStorage.setItem("token", data.data.accessToken);
+            if (data.data.refreshToken) localStorage.setItem("refreshToken", data.data.refreshToken);
+            await reloadPermissions();
             navigate("/dashboard");
         } catch (err) {
             console.error(err);

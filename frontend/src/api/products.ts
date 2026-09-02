@@ -1,4 +1,5 @@
 import { API_URL, buildHeaders, fetchWithAuth  } from "./http";
+import { executeWithAdminAuthorization } from "./admin-authorizations";
 
 export type ProductStatus = "ACTIVE" | "INACTIVE";
 
@@ -55,11 +56,14 @@ export async function createProduct(payload: ProductPayload): Promise<Product> {
 }
 
 export async function updateProduct(id: string, payload: ProductPayload): Promise<Product> {
-  const response = await fetchWithAuth(`${API_URL}/products/${id}`, {
-    method: "PUT",
-    headers: buildHeaders(true),
-    body: JSON.stringify(payload),
-  });
+  const response = await executeWithAdminAuthorization(
+    { operationKey: "PRODUCT_UPDATE", resourceType: "PRODUCT", resourceId: id },
+    (temporaryToken) => fetchWithAuth(`${API_URL}/products/${id}`, {
+      method: "PUT",
+      headers: { ...buildHeaders(true), ...(temporaryToken ? { "X-Admin-Authorization": temporaryToken } : {}) },
+      body: JSON.stringify(payload),
+    }),
+  );
   if (!response.ok) throw new Error("Failed to update product");
   const json = (await response.json()) as ApiResponse<Product>;
   return json.data;

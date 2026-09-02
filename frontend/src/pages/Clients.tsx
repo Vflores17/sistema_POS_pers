@@ -1,5 +1,5 @@
 import type { ChangeEvent, FormEvent, ReactElement } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createClient,
   deleteClient,
@@ -12,7 +12,8 @@ import {
 } from "../api/clients";
 import styles from "./Clients.module.css";
 import { useNavigate } from "react-router-dom";
-import { isAdmin } from "../api/auth-utils";
+import { usePermissions } from "../auth/PermissionContext";
+import { isAdminAuthorizationCancelled } from "../api/admin-authorizations";
 
 interface ClientFormState {
   name: string;
@@ -31,6 +32,9 @@ const INITIAL_FORM: ClientFormState = {
 const PAGE_SIZE = 20;
 
 export default function Clients(): ReactElement {
+  const { hasPermission } = usePermissions();
+  const canCreate = hasPermission("CLIENT_CREATE");
+  const canDelete = hasPermission("CLIENT_DELETE");
   const [clients, setClients] = useState<Client[]>([]);
   const [form, setForm] = useState<ClientFormState>(INITIAL_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -38,6 +42,7 @@ export default function Clients(): ReactElement {
   const [error, setError] = useState<string>("");
   const [search, setSearch] = useState<string>("");
   const [page, setPage] = useState<number>(1);
+  const formRef = useRef<HTMLDivElement>(null);
 
   const navigate = useNavigate();
 const [modal, setModal] = useState<{
@@ -87,11 +92,6 @@ const [modal, setModal] = useState<{
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  // Resetear página al buscar
-  useEffect(() => {
-    setPage(1);
-  }, [search]);
-
   async function loadClients(): Promise<void> {
     setLoading(true);
     setError("");
@@ -115,6 +115,7 @@ const [modal, setModal] = useState<{
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setError("");
+    if (!editingId && !canCreate) return;
 
     const payload: ClientPayload = {
       name: form.name.trim(),
@@ -142,19 +143,28 @@ const [modal, setModal] = useState<{
       }
       resetForm();
     } catch (err) {
+      if (isAdminAuthorizationCancelled(err)) return;
       setError(readError(err, "No se pudo guardar el cliente."));
     }
   }
 
   function onEdit(client: Client): void {
-    setEditingId(client.id);
-    setForm({
-      name: client.name ?? "",
-      phone: client.phone ?? "",
-      type: client.type ?? "DETAIL",
-      status: client.status ?? "ACTIVE",
+  setEditingId(client.id);
+
+  setForm({
+    name: client.name ?? "",
+    phone: client.phone ?? "",
+    type: client.type ?? "DETAIL",
+    status: client.status ?? "ACTIVE",
+  });
+
+  setTimeout(() => {
+    formRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
     });
-  }
+  }, 0);
+}
 
   async function onDelete(clientId: string): Promise<void> {
     const confirmed = window.confirm("¿Eliminar este cliente?");
@@ -184,7 +194,7 @@ const [modal, setModal] = useState<{
           </button>
         </header>
 
-        <div className={styles.card}>
+        {(canCreate || editingId) && <div ref={formRef} className={styles.card}>
           <form className={styles.form} onSubmit={onSubmit}>
             <div className={styles.field}>
               <label htmlFor="name">Nombre</label>
@@ -220,7 +230,7 @@ const [modal, setModal] = useState<{
               ) : null}
             </div>
           </form>
-        </div>
+        </div>}
 
         <div className={styles.card}>
           {error ? <p className={styles.error}>{error}</p> : null}
@@ -231,7 +241,7 @@ const [modal, setModal] = useState<{
               type="text"
               placeholder="🔍 Buscar por nombre o teléfono..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               style={{ flex: 1, padding: "0.4rem 0.75rem", borderRadius: 8, border: "1px solid #d1d5db", fontSize: "0.9rem" }}
             />
             <span style={{ fontSize: "0.85rem", color: "#6b7280", whiteSpace: "nowrap" }}>
@@ -267,12 +277,12 @@ const [modal, setModal] = useState<{
                     </td>
                     <td>
                       <div className={styles.rowActions}>
-                        {isAdmin() && (
+                        {(
                           <button className={`${styles.button} ${styles.secondary}`} type="button" onClick={() => onEdit(client)}>
                             Editar
                           </button>
                         )}
-                        {isAdmin() && (
+                        {canDelete && (
                           <button className={`${styles.button} ${styles.danger}`} type="button" onClick={() => void onDelete(client.id)}>
                             Eliminar
                           </button>

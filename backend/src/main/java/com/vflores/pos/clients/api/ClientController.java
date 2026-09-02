@@ -1,5 +1,6 @@
 package com.vflores.pos.clients.api;
 
+import com.vflores.pos.adminauthorizations.application.AdminAuthorizedOperationExecutor;
 import com.vflores.pos.clients.api.dto.ClientResponse;
 import com.vflores.pos.clients.api.dto.CreateClientRequest;
 import com.vflores.pos.clients.api.dto.UpdateClientRequest;
@@ -15,6 +16,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -36,6 +39,7 @@ public class ClientController {
     private static final List<String> ALLOWED_SORT_FIELDS = List.of("name", "type", "createdAt", "updatedAt");
 
     private final ClientService clientService;
+    private final AdminAuthorizedOperationExecutor adminAuthorizedOperationExecutor;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<ClientResponse>>> findAll(
@@ -76,9 +80,15 @@ public class ClientController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<ClientResponse>> update(
             @PathVariable UUID id,
-            @Valid @RequestBody UpdateClientRequest request
+            @Valid @RequestBody UpdateClientRequest request,
+            @RequestHeader(value = "X-Admin-Authorization", required = false) String adminAuthorization,
+            Authentication authentication
     ) {
-        return ResponseEntity.ok(ApiResponse.ok(clientService.update(id, request)));
+        ClientResponse response = adminAuthorizedOperationExecutor.execute(
+                authentication, "CLIENT_UPDATE", "CLIENT_UPDATE", "CLIENT", id, adminAuthorization,
+                () -> clientService.update(id, request)
+        );
+        return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
     @DeleteMapping("/{id}")

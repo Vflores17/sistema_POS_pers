@@ -1,4 +1,5 @@
 import { API_URL, buildHeaders, fetchWithAuth } from "./http";
+import { executeWithAdminAuthorization } from "./admin-authorizations";
 
 export type ClientType = "DETAIL" | "WHOLESALE" | "NEW";
 export type ClientStatus = "ACTIVE" | "INACTIVE";
@@ -57,11 +58,14 @@ export async function createClient(payload: ClientPayload): Promise<Client> {
 }
 
 export async function updateClient(id: string, payload: ClientPayload): Promise<Client> {
-  const response = await fetchWithAuth(`${API_URL}/clients/${id}`, {
-    method: "PUT",
-    headers: buildHeaders(true),
-    body: JSON.stringify(payload),
-  });
+  const response = await executeWithAdminAuthorization(
+    { operationKey: "CLIENT_UPDATE", resourceType: "CLIENT", resourceId: id },
+    (temporaryToken) => fetchWithAuth(`${API_URL}/clients/${id}`, {
+      method: "PUT",
+      headers: { ...buildHeaders(true), ...(temporaryToken ? { "X-Admin-Authorization": temporaryToken } : {}) },
+      body: JSON.stringify(payload),
+    }),
+  );
   if (!response.ok) throw new Error("Failed to update client");
   const json = (await response.json()) as ApiResponse<Client>;
   return { ...json.data, status: json.data.status ?? "ACTIVE" };

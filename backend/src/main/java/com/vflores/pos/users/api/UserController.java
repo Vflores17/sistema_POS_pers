@@ -5,8 +5,12 @@ import com.vflores.pos.shared.response.PageMeta;
 import com.vflores.pos.users.api.dto.AssignRolesRequest;
 import com.vflores.pos.users.api.dto.CreateUserRequest;
 import com.vflores.pos.users.api.dto.UpdateUserRequest;
+import com.vflores.pos.users.api.dto.ReplacePermissionOverridesRequest;
+import com.vflores.pos.users.api.dto.UserPermissionsResponse;
 import com.vflores.pos.users.api.dto.UserResponse;
+import com.vflores.pos.users.application.UserPermissionService;
 import com.vflores.pos.users.application.UserService;
+import com.vflores.pos.auth.infrastructure.security.AuthenticatedUser;
 import com.vflores.pos.users.domain.model.UserStatus;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +20,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -38,6 +43,7 @@ public class UserController {
     private static final List<String> ALLOWED_SORT_FIELDS = List.of("username", "email", "fullName", "createdAt", "updatedAt");
 
     private final UserService userService;
+    private final UserPermissionService userPermissionService;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<UserResponse>>> findAll(
@@ -92,6 +98,28 @@ public class UserController {
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         userService.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/permissions")
+    public ResponseEntity<ApiResponse<UserPermissionsResponse>> findPermissions(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.ok(userPermissionService.findByUserId(id)));
+    }
+
+    @PutMapping("/{id}/permission-overrides")
+    public ResponseEntity<ApiResponse<UserPermissionsResponse>> replacePermissionOverrides(
+            @PathVariable UUID id,
+            @Valid @RequestBody ReplacePermissionOverridesRequest request,
+            @AuthenticationPrincipal AuthenticatedUser currentUser
+    ) {
+        UUID createdById = currentUser == null ? null : currentUser.getId();
+        return ResponseEntity.ok(ApiResponse.ok(
+                userPermissionService.replace(id, request.overrides(), createdById)
+        ));
+    }
+
+    @DeleteMapping("/{id}/permission-overrides")
+    public ResponseEntity<ApiResponse<UserPermissionsResponse>> clearPermissionOverrides(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.ok(userPermissionService.clear(id)));
     }
 
     private Pageable toPageable(int page, int size, String sortParam) {

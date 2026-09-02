@@ -7,6 +7,33 @@ export interface RoleOption {
   name: string;
 }
 
+export interface Permission {
+  id: string;
+  code: string;
+  module: string;
+  description: string | null;
+}
+
+export type PermissionOverrideEffect = "ALLOW" | "DENY";
+
+export interface UserPermissions {
+  userId: string;
+  inheritedPermissions: string[];
+  allowedPermissions: string[];
+  deniedPermissions: string[];
+  effectivePermissions: string[];
+}
+
+export interface CurrentUser {
+  id: string;
+  username: string;
+  email: string;
+  fullName: string;
+  status: UserStatus;
+  roles: string[];
+  permissions: string[];
+}
+
 export interface UserRole {
   id: string;
   name: string;
@@ -99,5 +126,59 @@ export async function listRoles(): Promise<RoleOption[]> {
   });
   if (!response.ok) throw new Error("Failed to load roles");
   const json = (await response.json()) as PagedApiResponse<RoleOption>;
+  return json.data;
+}
+
+export async function getCurrentUser(): Promise<CurrentUser> {
+  const response = await fetchWithAuth(`${API_URL}/auth/me`, {
+    method: "GET",
+    headers: buildHeaders(false),
+  });
+  if (!response.ok) throw new Error("Failed to load current user");
+  const json = (await response.json()) as ApiResponse<CurrentUser>;
+  return json.data;
+}
+
+export async function listPermissions(): Promise<Permission[]> {
+  const response = await fetchWithAuth(`${API_URL}/permissions?size=100&sort=module,asc`, {
+    method: "GET",
+    headers: buildHeaders(false),
+  });
+  if (!response.ok) throw new Error("Failed to load permissions");
+  const json = (await response.json()) as PagedApiResponse<Permission>;
+  return json.data;
+}
+
+export async function getUserPermissions(userId: string): Promise<UserPermissions> {
+  const response = await fetchWithAuth(`${API_URL}/users/${userId}/permissions`, {
+    method: "GET",
+    headers: buildHeaders(false),
+  });
+  if (!response.ok) throw new Error("Failed to load user permissions");
+  const json = (await response.json()) as ApiResponse<UserPermissions>;
+  return json.data;
+}
+
+export async function replaceUserPermissionOverrides(
+  userId: string,
+  overrides: Array<{ permissionId: string; effect: PermissionOverrideEffect }>
+): Promise<UserPermissions> {
+  const response = await fetchWithAuth(`${API_URL}/users/${userId}/permission-overrides`, {
+    method: "PUT",
+    headers: buildHeaders(true),
+    body: JSON.stringify({ overrides }),
+  });
+  if (!response.ok) throw new Error("Failed to update permission overrides");
+  const json = (await response.json()) as ApiResponse<UserPermissions>;
+  return json.data;
+}
+
+export async function clearUserPermissionOverrides(userId: string): Promise<UserPermissions> {
+  const response = await fetchWithAuth(`${API_URL}/users/${userId}/permission-overrides`, {
+    method: "DELETE",
+    headers: buildHeaders(false),
+  });
+  if (!response.ok) throw new Error("Failed to clear permission overrides");
+  const json = (await response.json()) as ApiResponse<UserPermissions>;
   return json.data;
 }

@@ -1,6 +1,7 @@
 package com.vflores.pos.auth.infrastructure.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vflores.pos.adminauthorizations.application.AdminAuthorizationRequiredException;
 import com.vflores.pos.shared.exception.ApiErrorResponse;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -29,8 +30,16 @@ public class RestAccessDeniedHandler implements AccessDeniedHandler {
     ) throws IOException, ServletException {
         response.setStatus(HttpStatus.FORBIDDEN.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.getWriter().write(objectMapper.writeValueAsString(
-                ApiErrorResponse.of("ACCESS_DENIED", "You do not have permission for this action", List.of())
-        ));
+        boolean temporaryRequired = accessDeniedException instanceof AdminAuthorizationRequiredException
+                || Boolean.TRUE.equals(request.getAttribute(
+                        AdminAuthorizationRequiredException.REQUEST_ATTRIBUTE
+                ));
+        response.getWriter().write(objectMapper.writeValueAsString(ApiErrorResponse.of(
+                temporaryRequired ? "ADMIN_AUTHORIZATION_REQUIRED" : "ACCESS_DENIED",
+                temporaryRequired
+                        ? "Temporary administrator authorization is required"
+                        : "You do not have permission for this action",
+                List.of()
+        )));
     }
 }

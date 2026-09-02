@@ -47,7 +47,7 @@ public class CustomUserDetailsService implements UserDetailsService {
                 user.getFullName(),
                 true,
                 false,
-                authorityMapper.mapAuthorities(user.getRoles())
+                authorityMapper.mapAuthorities(user)
         );
     }
 }

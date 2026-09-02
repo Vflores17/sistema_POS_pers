@@ -1,4 +1,5 @@
 import { API_URL, buildHeaders, fetchWithAuth  } from "./http";
+import { executeWithAdminAuthorization } from "./admin-authorizations";
 
 export type PaymentMethod = "CASH" | "SINPE" | "TRANSFER" | "CARD";
 export type SaleStatus = "PENDING" | "PARTIAL" | "PAID" | "CANCELLED";
@@ -115,11 +116,14 @@ export async function createSale(payload: CreateSalePayload): Promise<Sale> {
 }
 
 export async function updateSale(id: string, payload: UpdateSalePayload): Promise<Sale> {
-  const response = await fetchWithAuth(`${API_URL}/sales/${id}`, {
-    method: "PUT",
-    headers: buildHeaders(true),
-    body: JSON.stringify(payload),
-  });
+  const response = await executeWithAdminAuthorization(
+    { operationKey: "SALE_UPDATE", resourceType: "SALE", resourceId: id },
+    (temporaryToken) => fetchWithAuth(`${API_URL}/sales/${id}`, {
+      method: "PUT",
+      headers: { ...buildHeaders(true), ...(temporaryToken ? { "X-Admin-Authorization": temporaryToken } : {}) },
+      body: JSON.stringify(payload),
+    }),
+  );
   return parseResponse<Sale>(response, "Failed to update sale");
 }
 
@@ -132,11 +136,17 @@ export async function deleteSale(id: string): Promise<void> {
 }
 
 export async function changeSaleStatus(id: string, status: SaleStatus): Promise<Sale> {
-  const response = await fetchWithAuth(`${API_URL}/sales/${id}/status`, {
+  const request = (temporaryToken?: string): Promise<Response> => fetchWithAuth(`${API_URL}/sales/${id}/status`, {
     method: "PATCH",
-    headers: buildHeaders(true),
+    headers: { ...buildHeaders(true), ...(temporaryToken ? { "X-Admin-Authorization": temporaryToken } : {}) },
     body: JSON.stringify({ status }),
   });
+  const response = status === "CANCELLED"
+    ? await executeWithAdminAuthorization(
+        { operationKey: "SALE_CANCEL", resourceType: "SALE", resourceId: id },
+        request,
+      )
+    : await request();
   return parseResponse<Sale>(response, "Failed to update sale status");
 }
 

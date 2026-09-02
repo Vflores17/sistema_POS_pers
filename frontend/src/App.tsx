@@ -16,20 +16,16 @@ export default function App(): ReactElement {
       <Route path="/login" element={<Login />} />
 
       <Route element={<PrivateRoute />}>
-
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/sales" element={<Sales />} />
-        <Route path="/sales/new" element={<Sales />} />
-        <Route path="/sales/:id/edit" element={<Sales />} />
-        <Route path="/sales/:id/view" element={<Sales />} />
-        <Route path="/route-sales" element={<RouteSales />} />
-        <Route path="/route-sales/new" element={<RouteSales />} />
-        <Route path="/route-sales/:id/edit" element={<RouteSales />} />
-        <Route path="/route-sales/:id/view" element={<RouteSales />} />
-        <Route path="/clients" element={<Clients />} />
-        <Route path="/products" element={<Products />} />
-        <Route path="/users" element={<Users />} />
-
+        <Route element={<PrivateRoute permission="SALE_READ" />}><Route path="/sales" element={<Sales />} /><Route path="/sales/:id/view" element={<Sales />} /></Route>
+        <Route element={<PrivateRoute permission="SALE_CREATE" />}><Route path="/sales/new" element={<Sales />} /></Route>
+        <Route element={<PrivateRoute permission="SALE_READ" />}><Route path="/sales/:id/edit" element={<Sales />} /></Route>
+        <Route element={<PrivateRoute permission="ROUTE_READ" />}><Route path="/route-sales" element={<RouteSales />} /><Route path="/route-sales/:id/view" element={<RouteSales />} /></Route>
+        <Route element={<PrivateRoute permission="ROUTE_CREATE" />}><Route path="/route-sales/new" element={<RouteSales />} /></Route>
+        <Route element={<PrivateRoute permission="ROUTE_READ" />}><Route path="/route-sales/:id/edit" element={<RouteSales />} /></Route>
+        <Route element={<PrivateRoute permission="CLIENT_READ" />}><Route path="/clients" element={<Clients />} /></Route>
+        <Route element={<PrivateRoute permission="PRODUCT_READ" />}><Route path="/products" element={<Products />} /></Route>
+        <Route element={<PrivateRoute permission="USER_READ" />}><Route path="/users" element={<Users />} /></Route>
       </Route>
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

@@ -2,12 +2,16 @@ package com.vflores.pos.auth.api;
 
 import com.vflores.pos.auth.api.dto.LoginRequest;
 import com.vflores.pos.auth.api.dto.LoginResponse;
+import com.vflores.pos.auth.api.dto.CurrentUserResponse;
 import com.vflores.pos.auth.api.dto.RefreshTokenRequest;
 import com.vflores.pos.auth.application.AuthService;
+import com.vflores.pos.auth.infrastructure.security.AuthenticatedUser;
 import com.vflores.pos.shared.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -34,5 +38,12 @@ public class AuthController {
     public ResponseEntity<ApiResponse<String>> logout(@Valid @RequestBody RefreshTokenRequest request) {
         authService.logout(request);
         return ResponseEntity.ok(ApiResponse.ok("Logged out"));
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<CurrentUserResponse>> me(
+            @AuthenticationPrincipal AuthenticatedUser currentUser
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(authService.me(currentUser.getId())));
     }
 }

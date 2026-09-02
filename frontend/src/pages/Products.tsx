@@ -15,7 +15,8 @@ import {
 } from "../api/products";
 import styles from "./Products.module.css";
 import { useNavigate } from "react-router-dom";
-import { isAdmin } from "../api/auth-utils";
+import { usePermissions } from "../auth/PermissionContext";
+import { isAdminAuthorizationCancelled } from "../api/admin-authorizations";
 
 interface ProductFormState {
   name: string;
@@ -42,6 +43,11 @@ const INITIAL_FORM: ProductFormState = {
 const PAGE_SIZE = 20;
 
 export default function Products(): ReactElement {
+  const { hasPermission, hasAllPermissions } = usePermissions();
+  const canReadPrices = hasPermission("PRICE_READ");
+  const canCreate = hasAllPermissions("PRODUCT_CREATE", "PRICE_CREATE");
+  const canManagePrices = hasAllPermissions("PRICE_UPDATE", "PRICE_CREATE");
+  const canDelete = hasPermission("PRODUCT_DELETE");
   const [products, setProducts] = useState<Product[]>([]);
   const [form, setForm] = useState<ProductFormState>(INITIAL_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -102,18 +108,15 @@ const [modal, setModal] = useState<{
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  // Resetear página al buscar
-  useEffect(() => {
-    setPage(1);
-  }, [search]);
-
   async function loadProducts(): Promise<void> {
   setLoading(true);
   setError("");
   try {
     const [data, allPrices] = await Promise.all([
       listProducts(),
-      getAllProductPrices(),
+      canReadPrices
+        ? getAllProductPrices()
+        : Promise.resolve<Record<string, { id: string; type: string; price: number }[]>>({}),
     ]);
     setProducts(data);
 
@@ -149,6 +152,7 @@ const [modal, setModal] = useState<{
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setError("");
+    if (!editingId && !canCreate) return;
 
     const payload: ProductPayload = {
       name: form.name.trim(),
@@ -174,20 +178,20 @@ const [modal, setModal] = useState<{
     try {
   if (editingId) {
     const updated = await updateProduct(editingId, payload);
-    const existingPrices = await getProductPrices(editingId);
-
-    const priceTypes = [
-      { type: "DETAIL" as const, value: Number(form.priceDetail) },
-      { type: "WHOLESALE" as const, value: Number(form.priceWholesale) },
-      { type: "NEW" as const, value: Number(form.priceNew) },
-    ];
-
-    for (const { type, value } of priceTypes) {
-      const existing = existingPrices.find(p => p.type === type);
-      if (existing) {
-        await updateProductPrice(editingId, existing.id, type, value);
-      } else {
-        await createProductPrice(editingId, type, value);
+    if (canManagePrices) {
+      const existingPrices = await getProductPrices(editingId);
+      const priceTypes = [
+        { type: "DETAIL" as const, value: Number(form.priceDetail) },
+        { type: "WHOLESALE" as const, value: Number(form.priceWholesale) },
+        { type: "NEW" as const, value: Number(form.priceNew) },
+      ];
+      for (const { type, value } of priceTypes) {
+        const existing = existingPrices.find(p => p.type === type);
+        if (existing) {
+          await updateProductPrice(editingId, existing.id, type, value);
+        } else {
+          await createProductPrice(editingId, type, value);
+        }
       }
     }
 
@@ -206,6 +210,7 @@ const [modal, setModal] = useState<{
   await loadProducts();
   resetForm();
 } catch (err) {
+  if (isAdminAuthorizationCancelled(err)) return;
   setError(readError(err, "No se pudo guardar el producto."));
 }
   }
@@ -275,7 +280,7 @@ const [modal, setModal] = useState<{
         </header>
         <section className={styles.page}>
 
-          <div className={styles.card}>
+          {(canCreate || editingId) && <div className={styles.card}>
             <form className={styles.form} onSubmit={onSubmit}>
               <div className={styles.field}>
                 <label htmlFor="name">Nombre</label>
@@ -291,15 +296,15 @@ const [modal, setModal] = useState<{
               </div>
               <div className={styles.field}>
                 <label htmlFor="priceDetail">Precio Detalle</label>
-                <input id="priceDetail" name="priceDetail" type="number" min="0" step="0.01" value={form.priceDetail} onChange={onInputChange} />
+                <input id="priceDetail" name="priceDetail" type="number" min="0" step="0.01" value={form.priceDetail} onChange={onInputChange} disabled={Boolean(editingId) && !canManagePrices} />
               </div>
               <div className={styles.field}>
                 <label htmlFor="priceWholesale">Precio Mayorista</label>
-                <input id="priceWholesale" name="priceWholesale" type="number" min="0" step="0.01" value={form.priceWholesale} onChange={onInputChange} />
+                <input id="priceWholesale" name="priceWholesale" type="number" min="0" step="0.01" value={form.priceWholesale} onChange={onInputChange} disabled={Boolean(editingId) && !canManagePrices} />
               </div>
               <div className={styles.field}>
                 <label htmlFor="priceNew">Precio Nuevo</label>
-                <input id="priceNew" name="priceNew" type="number" min="0" step="0.01" value={form.priceNew} onChange={onInputChange} />
+                <input id="priceNew" name="priceNew" type="number" min="0" step="0.01" value={form.priceNew} onChange={onInputChange} disabled={Boolean(editingId) && !canManagePrices} />
               </div>
               <div className={styles.field}>
                 <label htmlFor="status">Estado</label>
@@ -319,7 +324,7 @@ const [modal, setModal] = useState<{
                 ) : null}
               </div>
             </form>
-          </div>
+          </div>}
 
           <div className={styles.card}>
             {error ? <p className={styles.error}>{error}</p> : null}
@@ -330,7 +335,7 @@ const [modal, setModal] = useState<{
                 type="text"
                 placeholder="🔍 Buscar por nombre..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                 style={{ flex: 1, padding: "0.4rem 0.75rem", borderRadius: 8, border: "1px solid #d1d5db", fontSize: "0.9rem" }}
               />
               <span style={{ fontSize: "0.85rem", color: "#6b7280", whiteSpace: "nowrap" }}>
@@ -356,9 +361,9 @@ const [modal, setModal] = useState<{
                     <tr key={product.id}>
                       <td>{product.name}</td>
                       <td>{product.description ?? "-"}</td>
-                      <td>₡{(productPrices[product.id]?.detail ?? 0).toLocaleString('es-CR')}</td>
-                      <td>₡{(productPrices[product.id]?.wholesale ?? 0).toLocaleString('es-CR')}</td>
-                      <td>₡{(productPrices[product.id]?.new ?? 0).toLocaleString('es-CR')}</td>
+                      <td>{canReadPrices ? `₡${(productPrices[product.id]?.detail ?? 0).toLocaleString('es-CR')}` : "-"}</td>
+                      <td>{canReadPrices ? `₡${(productPrices[product.id]?.wholesale ?? 0).toLocaleString('es-CR')}` : "-"}</td>
+                      <td>{canReadPrices ? `₡${(productPrices[product.id]?.new ?? 0).toLocaleString('es-CR')}` : "-"}</td>
                       <td>
                         <span className={`${styles.status} ${product.status === "ACTIVE" ? styles.active : styles.inactive}`}>
                           {product.status === "ACTIVE" ? "Activo" : "Inactivo"}
@@ -366,12 +371,12 @@ const [modal, setModal] = useState<{
                       </td>
                       <td>
                         <div className={styles.rowActions}>
-                          {isAdmin() && (
+                          {canReadPrices && (
                             <button className={`${styles.button} ${styles.secondary}`} type="button" onClick={() => onEdit(product)}>
                               Editar
                             </button>
                           )}
-                          {isAdmin() && (
+                          {canDelete && (
                             <button className={`${styles.button} ${styles.danger}`} type="button" onClick={() => void onDelete(product.id)}>
                               Eliminar
                             </button>

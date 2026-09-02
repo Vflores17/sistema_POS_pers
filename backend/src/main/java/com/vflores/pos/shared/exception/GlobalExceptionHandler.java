@@ -1,5 +1,7 @@
 package com.vflores.pos.shared.exception;
 
+import com.vflores.pos.adminauthorizations.application.AdminAuthorizationRejectedException;
+import com.vflores.pos.adminauthorizations.application.AdminAuthorizationRequiredException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -7,6 +9,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -57,6 +60,40 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleAuthentication(AuthenticationException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(ApiErrorResponse.of("AUTH_UNAUTHORIZED", ex.getMessage(), List.of()));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiErrorResponse> handleAccessDenied(AccessDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiErrorResponse.of(
+                        "ACCESS_DENIED",
+                        "You do not have permission for this action",
+                        List.of()
+                ));
+    }
+
+    @ExceptionHandler(AdminAuthorizationRequiredException.class)
+    public ResponseEntity<ApiErrorResponse> handleAdminAuthorizationRequired(
+            AdminAuthorizationRequiredException ex
+    ) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiErrorResponse.of(
+                        "ADMIN_AUTHORIZATION_REQUIRED",
+                        "Temporary administrator authorization is required",
+                        List.of()
+                ));
+    }
+
+    @ExceptionHandler(AdminAuthorizationRejectedException.class)
+    public ResponseEntity<ApiErrorResponse> handleAdminAuthorizationRejected(
+            AdminAuthorizationRejectedException ex
+    ) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiErrorResponse.of(
+                        "ADMIN_AUTHORIZATION_REJECTED",
+                        ex.getMessage(),
+                        List.of()
+                ));
     }
 
     @ExceptionHandler({LockedException.class, DisabledException.class})

@@ -2,6 +2,7 @@ package com.vflores.pos.auth.application;
 
 import com.vflores.pos.auth.api.dto.LoginRequest;
 import com.vflores.pos.auth.api.dto.LoginResponse;
+import com.vflores.pos.auth.api.dto.CurrentUserResponse;
 import com.vflores.pos.auth.api.dto.RefreshTokenRequest;
 import com.vflores.pos.auth.config.JwtProperties;
 import com.vflores.pos.auth.domain.model.RefreshToken;
@@ -20,6 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
+import java.util.Locale;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -31,6 +35,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserDetailsService userDetailsService;
+    private final EffectivePermissionService effectivePermissionService;
 
     @Transactional
     public LoginResponse login(LoginRequest request) {
@@ -81,6 +86,26 @@ public class AuthService {
                 .orElseThrow(() -> new BadCredentialsException("Invalid refresh token"));
 
         refreshTokenRepository.revokeAllByUserId(refreshToken.getUser().getId());
+    }
+
+    @Transactional(readOnly = true)
+    public CurrentUserResponse me(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+        Set<String> roles = user.getRoles().stream()
+                .filter(role -> role.isActive())
+                .map(role -> role.getName().trim().toUpperCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+
+        return new CurrentUserResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getFullName(),
+                user.getStatus(),
+                roles,
+                effectivePermissionService.resolve(user).effective()
+        );
     }
 
     private String createRefreshToken(User user) {

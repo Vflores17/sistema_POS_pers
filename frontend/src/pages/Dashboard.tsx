@@ -2,42 +2,45 @@ import type { ReactElement } from "react";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import styles from "./Dashboard.module.css";
+import { usePermissions } from "../auth/PermissionContext";
 
 export default function Dashboard(): ReactElement {
   const navigate = useNavigate();
+  const { hasPermission, clearSession } = usePermissions();
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent): void {
       if (e.altKey && e.key.toLowerCase() === "v") {
         e.preventDefault();
-        navigate("/sales");
+        if (hasPermission("SALE_READ")) navigate("/sales");
       }
       if (e.altKey && e.key.toLowerCase() === "r") {
         e.preventDefault();
-        navigate("/route-sales");
+        if (hasPermission("ROUTE_READ")) navigate("/route-sales");
       }
       if (e.altKey && e.key.toLowerCase() === "p") {
         e.preventDefault();
-        navigate("/products");
+        if (hasPermission("PRODUCT_READ")) navigate("/products");
       }
       if (e.altKey && e.key.toLowerCase() === "c") {
         e.preventDefault();
-        navigate("/clients");
+        if (hasPermission("CLIENT_READ")) navigate("/clients");
       }
       if (e.altKey && e.key.toLowerCase() === "u") {
         e.preventDefault();
-        navigate("/users");
+        if (hasPermission("USER_READ")) navigate("/users");
       }
       if (e.altKey && e.key.toLowerCase() === "s") {
         e.preventDefault();
         localStorage.removeItem("token");
         localStorage.removeItem("refreshToken");
+        clearSession();
         window.location.href = "/login";
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [navigate]);
+  }, [navigate, hasPermission, clearSession]);
 
   return (
     <section className={styles.page}>
@@ -54,31 +57,32 @@ export default function Dashboard(): ReactElement {
       </header>
 
       <nav className={styles.menuGrid}>
-        <a href="/sales" className={styles.menuItem}>
+        {hasPermission("SALE_READ") && <a href="/sales" className={styles.menuItem}>
           <span className={styles.menuIcon}>🧾</span>
           <span><u>V</u>entas</span>
-        </a>
-        <a href="/route-sales" className={styles.menuItem}>
+        </a>}
+        {hasPermission("ROUTE_READ") && <a href="/route-sales" className={styles.menuItem}>
           <span className={styles.menuIcon}>🚚</span>
           <span><u>R</u>utas</span>
-        </a>
-        <a href="/products" className={styles.menuItem}>
+        </a>}
+        {hasPermission("PRODUCT_READ") && <a href="/products" className={styles.menuItem}>
           <span className={styles.menuIcon}>📦</span>
           <span><u>P</u>roductos</span>
-        </a>
-        <a href="/clients" className={styles.menuItem}>
+        </a>}
+        {hasPermission("CLIENT_READ") && <a href="/clients" className={styles.menuItem}>
           <span className={styles.menuIcon}>👥</span>
           <span><u>C</u>lientes</span>
-        </a>
-        <a href="/users" className={styles.menuItem}>
+        </a>}
+        {hasPermission("USER_READ") && <a href="/users" className={styles.menuItem}>
           <span className={styles.menuIcon}>👤</span>
           <span><u>U</u>suarios</span>
-        </a>
+        </a>}
         <a href="#"
           className={styles.menuItem}
           onClick={() => {
             localStorage.removeItem("token");
             localStorage.removeItem("refreshToken");
+            clearSession();
             window.location.href = "/login";
           }}
         >
