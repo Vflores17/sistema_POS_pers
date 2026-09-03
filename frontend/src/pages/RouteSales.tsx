@@ -1,6 +1,7 @@
 import type { ChangeEvent, ReactElement } from "react";
 import { useEffect, useMemo, useState, useRef } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";import { listClients, type Client } from "../api/clients";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { listClients, type Client } from "../api/clients";
 import {
   createRouteSale,
   changeRouteSaleStatus,
@@ -42,9 +43,15 @@ import ModuleLoadingSkeleton from "../components/ModuleLoadingSkeleton";
 import SaleHistoryFilters from "../components/SaleHistoryFilters";
 import SaleHistoryTable from "../components/SaleHistoryTable";
 import RouteSalesHistoryActions from "../components/RouteSalesHistoryActions";
-import { SaleFormHeader, SaleInvoiceField } from "../components/SaleFormPresentation";
+import {
+  SaleFormHeader,
+  SaleInvoiceField,
+} from "../components/SaleFormPresentation";
 import { useSaleHistoryFilters } from "../hooks/useSaleHistoryFilters";
-import { useEscapeShortcut, useSaleKeyboardShortcuts } from "../hooks/useSaleKeyboardShortcuts";
+import {
+  useEscapeShortcut,
+  useSaleKeyboardShortcuts,
+} from "../hooks/useSaleKeyboardShortcuts";
 import { useSalePayments } from "../hooks/useSalePayments";
 import { useRouteCashRegister } from "../hooks/useCashRegister";
 import { generateRouteSaleWhatsappPdf } from "../utils/saleExportUtils";
@@ -114,7 +121,8 @@ export default function RouteSales(): ReactElement {
   const canDeleteDriver = hasPermission("DRIVER_DELETE");
   const canOperateCaja = canCreate || canUpdate;
   const [showModificarModal, setShowModificarModal] = useState<boolean>(false);
-const [modificarInvoiceInput, setModificarInvoiceInput] = useState<string>("");
+  const [modificarInvoiceInput, setModificarInvoiceInput] =
+    useState<string>("");
   const {
     cashRegister: caja,
     openCashRegister,
@@ -206,15 +214,12 @@ const [modificarInvoiceInput, setModificarInvoiceInput] = useState<string>("");
     gastos: { descripcion: string; monto: number }[];
   } | null>(null);
 
-
-  
-
   const [dropdownPosition, setDropdownPosition] = useState<{
     top: number;
     left: number;
   } | null>(null);
 
-   const clientsById = useMemo(() => {
+  const clientsById = useMemo(() => {
     return new Map(clients.map((client) => [client.id, client]));
   }, [clients]);
 
@@ -230,29 +235,30 @@ const [modificarInvoiceInput, setModificarInvoiceInput] = useState<string>("");
     }, 300);
   }
 
-
   function onAbrirModificar(): void {
-
-    const selected = sortedAndFilteredSales.find(s => s.id === selectedRowId);
-  setModificarInvoiceInput(selected ? String(selected.invoiceNumber) : "");
-  setShowModificarModal(true);
-}
-
-async function onConfirmarModificar(): Promise<void> {
-  const numero = Number(modificarInvoiceInput);
-  if (!numero) {
-    setError("Ingresá un número de factura válido.");
-    return;
+    const selected = sortedAndFilteredSales.find((s) => s.id === selectedRowId);
+    setModificarInvoiceInput(selected ? String(selected.invoiceNumber) : "");
+    setShowModificarModal(true);
   }
-  const sale = sortedAndFilteredSales.find(s => s.invoiceNumber === numero)
-    ?? sales.find(s => s.invoiceNumber === numero);
-  if (!sale) {
-    setError(`No se encontró la ruta número ${numero}.`);
-    return;
+
+  async function onConfirmarModificar(): Promise<void> {
+    const numero = Number(modificarInvoiceInput);
+    if (!numero) {
+      setError("Ingresá un número de factura válido.");
+      return;
+    }
+    const sale =
+      sortedAndFilteredSales.find((s) => s.invoiceNumber === numero) ??
+      sales.find((s) => s.invoiceNumber === numero);
+    if (!sale) {
+      setError(`No se encontró la ruta número ${numero}.`);
+      return;
+    }
+    setShowModificarModal(false);
+    navigate(`/route-sales/${sale.id}/edit`, {
+      state: { selectedId: sale.id },
+    });
   }
-  setShowModificarModal(false);
-  navigate(`/route-sales/${sale.id}/edit`, { state: { selectedId: sale.id } });
-}
   function abrirCaja(): void {
     if (!montoInicialDraft) {
       setModal({
@@ -280,16 +286,21 @@ async function onConfirmarModificar(): Promise<void> {
   const [showComments, setShowComments] = useState<boolean>(false);
 
   async function cerrarCaja(): Promise<void> {
-    const openedAt = caja.openedAt || (() => {
-      const legacyDate = new Date(caja.horaInicio);
-      return Number.isNaN(legacyDate.getTime()) ? "" : legacyDate.toISOString();
-    })();
+    const openedAt =
+      caja.openedAt ||
+      (() => {
+        const legacyDate = new Date(caja.horaInicio);
+        return Number.isNaN(legacyDate.getTime())
+          ? ""
+          : legacyDate.toISOString();
+      })();
     if (!openedAt) {
       setModal({
         show: true,
         type: "error",
         title: "No se puede cerrar la caja",
-        message: "La apertura actual no tiene una fecha válida. Cierra manualmente esta caja local y vuelve a abrirla.",
+        message:
+          "La apertura actual no tiene una fecha válida. Cierra manualmente esta caja local y vuelve a abrirla.",
         confirmLabel: "Aceptar",
         onConfirm: closeModal,
       });
@@ -298,9 +309,18 @@ async function onConfirmarModificar(): Promise<void> {
     const closedAt = new Date();
     let movements: RouteSalePaymentMovement[];
     try {
-      movements = await listRouteSalePaymentMovements(openedAt, closedAt.toISOString());
+      movements = await listRouteSalePaymentMovements(
+        openedAt,
+        closedAt.toISOString(),
+      );
     } catch (cause) {
-      if (!isGloballyReportedError(cause)) notifyGlobalError(readError(cause, "No se pudieron consultar los pagos del turno de rutas."));
+      if (!isGloballyReportedError(cause))
+        notifyGlobalError(
+          readError(
+            cause,
+            "No se pudieron consultar los pagos del turno de rutas.",
+          ),
+        );
       return;
     }
     const fromTime = new Date(openedAt).getTime();
@@ -309,9 +329,10 @@ async function onConfirmarModificar(): Promise<void> {
       const createdAt = new Date(sale.createdAt).getTime();
       return createdAt >= fromTime && createdAt <= toTime;
     });
-    const totalByMethod = (method: PaymentMethod): number => movements
-      .filter((payment) => payment.method === method)
-      .reduce((sum, payment) => sum + Number(payment.amount), 0);
+    const totalByMethod = (method: PaymentMethod): number =>
+      movements
+        .filter((payment) => payment.method === method)
+        .reduce((sum, payment) => sum + Number(payment.amount), 0);
     const totalEfectivo = totalByMethod("CASH");
     const totalSinpe = totalByMethod("SINPE");
     const totalTransferencia = totalByMethod("TRANSFER");
@@ -499,7 +520,6 @@ async function onConfirmarModificar(): Promise<void> {
     void bootstrap();
   }, [isFormScreen, isEditScreen, id]);
 
-
   useEffect(() => {
     if (!selectedRowRef.current) return;
 
@@ -532,26 +552,34 @@ async function onConfirmarModificar(): Promise<void> {
   }, [selectedRowId, saleDraft.lines]);
 
   useEffect(() => {
-  if (isFormScreen) return;
-  if (!selectedRowId) return;
+    if (isFormScreen) return;
+    if (!selectedRowId) return;
 
-  const container = document.querySelector(`.${styles.tableContainer}`) as HTMLElement;
-  if (!container) return;
+    const container = document.querySelector(
+      `.${styles.tableContainer}`,
+    ) as HTMLElement;
+    if (!container) return;
 
-  const selectedRow = container.querySelector(`tr.${styles.selected}`) as HTMLElement;
-  if (!selectedRow) return;
+    const selectedRow = container.querySelector(
+      `tr.${styles.selected}`,
+    ) as HTMLElement;
+    if (!selectedRow) return;
 
-  const rowTop = selectedRow.offsetTop;
-  const rowBottom = rowTop + selectedRow.offsetHeight;
-  const containerTop = container.scrollTop;
-  const containerBottom = container.scrollTop + container.clientHeight;
+    const thead = container.querySelector("thead") as HTMLElement;
+    const theadHeight = thead ? thead.offsetHeight : 0;
 
-  if (rowTop < containerTop) {
-    container.scrollTop = rowTop;
-  } else if (rowBottom > containerBottom) {
-    container.scrollTop = rowBottom - container.clientHeight;
-  }
-}, [selectedRowId, isFormScreen]);
+    const rowTop = selectedRow.offsetTop;
+    const rowBottom = rowTop + selectedRow.offsetHeight;
+
+    const visibleTop = container.scrollTop + theadHeight;
+    const visibleBottom = container.scrollTop + container.clientHeight;
+
+    if (rowTop < visibleTop) {
+      container.scrollTop = Math.max(0, rowTop - theadHeight);
+    } else if (rowBottom > visibleBottom) {
+      container.scrollTop = rowBottom - container.clientHeight;
+    }
+  }, [selectedRowId, isFormScreen]);
 
   const sessionUserLabel = useMemo(() => getSessionUserLabel(), []);
 
@@ -565,14 +593,10 @@ async function onConfirmarModificar(): Promise<void> {
     activeElement === "select" ||
     activeElement === "textarea";
 
- 
-
   const filteredClientOptions = useMemo(
     () => filterClientsByName(clients, clientSearch),
     [clients, clientSearch],
   );
-
-  
 
   const calculatedTotal = useMemo(
     () => calculateLinesTotal(saleDraft.lines, productsById),
@@ -598,7 +622,7 @@ async function onConfirmarModificar(): Promise<void> {
   ): Promise<string> {
     return resolveConfiguredUnitPrice(productId, clientId, clientsById);
   }
-  
+
   function enviarWhatsApp(sale: Sale): void {
     const client = clientsById.get(sale.clientId);
     const phone = client?.phone ?? "";
@@ -755,21 +779,26 @@ async function onConfirmarModificar(): Promise<void> {
           resetPayments();
         }
       } else {
-  const salesData = await listRouteSales();
-  setSales(salesData);
+        const salesData = await listRouteSales();
+        setSales(salesData);
 
-  const state = location.state as { selectedId?: string } | null;
-  if (state?.selectedId) {
-    setSelectedRowId(state.selectedId);
-    setTimeout(() => {
-      const container = document.querySelector(`.${styles.tableContainer}`) as HTMLElement;
-      const selectedRow = container?.querySelector(`tr.${styles.selected}`) as HTMLElement;
-      if (container && selectedRow) {
-        container.scrollTop = selectedRow.offsetTop - container.clientHeight / 2;
+        const state = location.state as { selectedId?: string } | null;
+        if (state?.selectedId) {
+          setSelectedRowId(state.selectedId);
+          setTimeout(() => {
+            const container = document.querySelector(
+              `.${styles.tableContainer}`,
+            ) as HTMLElement;
+            const selectedRow = container?.querySelector(
+              `tr.${styles.selected}`,
+            ) as HTMLElement;
+            if (container && selectedRow) {
+              container.scrollTop =
+                selectedRow.offsetTop - container.clientHeight / 2;
+            }
+          }, 100);
+        }
       }
-    }, 100);
-  }
-}
     } catch (err) {
       setError(readError(err, "No se pudo cargar la información de rutas."));
     } finally {
@@ -1008,13 +1037,14 @@ async function onConfirmarModificar(): Promise<void> {
       resetPayments();
 
       setModal({
-  show: true,
-  type: "success",
-  title: `Factura número: ${String(saved.invoiceNumber)}`,
-  message: `La factura fue creada correctamente.`,
-  onConfirm: () => {
+        show: true,
+        type: "success",
+        title: `Factura número: ${String(saved.invoiceNumber)}`,
+        message: `La factura fue creada correctamente.`,
+        onConfirm: () => {
           closeModal();
-          if (isEditScreen) navigate("/route-sales", { state: { selectedId: id } });;
+          if (isEditScreen)
+            navigate("/route-sales", { state: { selectedId: id } });
         },
         confirmLabel: "Aceptar",
       });
@@ -1068,15 +1098,18 @@ async function onConfirmarModificar(): Promise<void> {
       message: "La factura de ruta quedará cancelada.",
       confirmLabel: "Cancelar ruta",
       cancelLabel: "Volver",
-      onConfirm: () => void (async () => {
-        closeModal();
-        try {
-          const updated = await changeRouteSaleStatus(saleId, "CANCELLED");
-          setSales((current) => current.map((sale) => sale.id === saleId ? updated : sale));
-        } catch (caught) {
-          setError(readError(caught, "No se pudo cancelar la ruta."));
-        }
-      })(),
+      onConfirm: () =>
+        void (async () => {
+          closeModal();
+          try {
+            const updated = await changeRouteSaleStatus(saleId, "CANCELLED");
+            setSales((current) =>
+              current.map((sale) => (sale.id === saleId ? updated : sale)),
+            );
+          } catch (caught) {
+            setError(readError(caught, "No se pudo cancelar la ruta."));
+          }
+        })(),
       onCancel: closeModal,
     });
   }
@@ -1102,11 +1135,13 @@ async function onConfirmarModificar(): Promise<void> {
         {" "}
         <section className={styles.container}>
           <SaleFormHeader
-            title={isEditScreen
-              ? "Modificar Ruta"
-              : isViewScreen
-                ? "Visualización de Factura de Ruta"
-                : "Nueva Factura Ruta"}
+            title={
+              isEditScreen
+                ? "Modificar Ruta"
+                : isViewScreen
+                  ? "Visualización de Factura de Ruta"
+                  : "Nueva Factura Ruta"
+            }
             error={error}
             styles={styles}
           />
@@ -1115,9 +1150,11 @@ async function onConfirmarModificar(): Promise<void> {
             {" "}
             <div className={styles.topGrid}>
               <SaleInvoiceField
-                invoiceNumber={invoiceNumber
-                  ? `R-${String(invoiceNumber).padStart(3, "0")}`
-                  : "—"}
+                invoiceNumber={
+                  invoiceNumber
+                    ? `R-${String(invoiceNumber).padStart(3, "0")}`
+                    : "—"
+                }
                 styles={styles}
               />
               <div className={styles.field}>
@@ -1175,31 +1212,33 @@ async function onConfirmarModificar(): Promise<void> {
                     autoComplete="off"
                   />
                   {showClientDropdown && (
-                    <div className={styles.clientDropdown} style={{ maxHeight: "200px", overflowY: "auto" }}>
-                      {filteredClientOptions
-                        .map((client, index) => (
-                          <div
-                            key={client.id}
-                            className={styles.clientOption}
-                            style={
-                              index === clientDropdownIndex
-                                ? { background: "#d1fae5", color: "#16a34a" }
-                                : {}
-                            }
-                            onMouseDown={() => {
-                              setSaleDraft((prev) => ({
-                                ...prev,
-                                clientId: client.id,
-                              }));
-                              setClientSearch(client.name);
-                              setShowClientDropdown(false);
-                              setClientDropdownIndex(-1);
-                            }}
-                            onMouseEnter={() => setClientDropdownIndex(index)}
-                          >
-                            {client.name}
-                          </div>
-                        ))}
+                    <div
+                      className={styles.clientDropdown}
+                      style={{ maxHeight: "200px", overflowY: "auto" }}
+                    >
+                      {filteredClientOptions.map((client, index) => (
+                        <div
+                          key={client.id}
+                          className={styles.clientOption}
+                          style={
+                            index === clientDropdownIndex
+                              ? { background: "#d1fae5", color: "#16a34a" }
+                              : {}
+                          }
+                          onMouseDown={() => {
+                            setSaleDraft((prev) => ({
+                              ...prev,
+                              clientId: client.id,
+                            }));
+                            setClientSearch(client.name);
+                            setShowClientDropdown(false);
+                            setClientDropdownIndex(-1);
+                          }}
+                          onMouseEnter={() => setClientDropdownIndex(index)}
+                        >
+                          {client.name}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1225,7 +1264,13 @@ async function onConfirmarModificar(): Promise<void> {
                         onChange={(event) =>
                           onPaymentToggle(item.key, event.target.checked)
                         }
-                        disabled={paymentDraft[item.key].amounts.some((entry) => Boolean(entry.id)) || !isEditScreen || !canUpdate}
+                        disabled={
+                          paymentDraft[item.key].amounts.some((entry) =>
+                            Boolean(entry.id),
+                          ) ||
+                          !isEditScreen ||
+                          !canUpdate
+                        }
                       />
                       <span
                         style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}
@@ -1233,25 +1278,61 @@ async function onConfirmarModificar(): Promise<void> {
                         {item.label}
                       </span>
                       {paymentDraft[item.key].enabled && (
-                        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-                          {paymentDraft[item.key].amounts.map((entry, index) => (
-                            <div key={entry.id ?? index} style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                placeholder="Monto"
-                                value={entry.amount}
-                                onChange={(e) => onPaymentAmountChange(item.key, index, e.target.value)}
-                                disabled={Boolean(entry.id) || !isEditScreen || !canUpdate}
-                              />
-                              {!entry.id && isEditScreen && canUpdate && paymentDraft[item.key].amounts.length > 1 && (
-                                <button type="button" onClick={() => onPaymentRemoveAmount(item.key, index)}>−</button>
-                              )}
-                            </div>
-                          ))}
+                        <div className={styles.paymentAmounts}>
+                          {paymentDraft[item.key].amounts.map(
+                            (entry, index) => (
+                              <div
+                                key={entry.id ?? index}
+                                className={styles.paymentAmountRow}
+                              >
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  placeholder="Monto"
+                                  value={entry.amount}
+                                  onChange={(e) =>
+                                    onPaymentAmountChange(
+                                      item.key,
+                                      index,
+                                      e.target.value,
+                                    )
+                                  }
+                                  disabled={
+                                    Boolean(entry.id) ||
+                                    !isEditScreen ||
+                                    !canUpdate
+                                  }
+                                />
+
+                                {!entry.id &&
+                                  isEditScreen &&
+                                  canUpdate &&
+                                  paymentDraft[item.key].amounts.length > 1 && (
+                                    <button
+                                      type="button"
+                                      className={`${styles.paymentActionButton} ${styles.paymentRemoveButton}`}
+                                      onClick={() =>
+                                        onPaymentRemoveAmount(item.key, index)
+                                      }
+                                      title="Eliminar monto"
+                                    >
+                                      −
+                                    </button>
+                                  )}
+                              </div>
+                            ),
+                          )}
+
                           {isEditScreen && canUpdate && (
-                            <button type="button" onClick={() => onPaymentAddAmount(item.key)}>+</button>
+                            <button
+                              type="button"
+                              className={`${styles.paymentActionButton} ${styles.paymentAddButton}`}
+                              onClick={() => onPaymentAddAmount(item.key)}
+                              title="Agregar monto"
+                            >
+                              +
+                            </button>
                           )}
                         </div>
                       )}
@@ -1347,7 +1428,9 @@ async function onConfirmarModificar(): Promise<void> {
                   className={styles.primaryButton}
                   type="button"
                   disabled={!canCreateProduct}
-                  onClick={() => canCreateProduct && setShowCreateProductModal(true)}
+                  onClick={() =>
+                    canCreateProduct && setShowCreateProductModal(true)
+                  }
                 >
                   Crear producto <kbd>F2</kbd>
                 </button>
@@ -1716,7 +1799,10 @@ async function onConfirmarModificar(): Promise<void> {
           </div>
 
           <div className={styles.formBottomBar}>
-            <p className={styles.totalBar} style={{ fontSize: "2rem", fontWeight: "bold" }}>
+            <p
+              className={styles.totalBar}
+              style={{ fontSize: "2rem", fontWeight: "bold" }}
+            >
               Total: ₡{calculatedTotal.toLocaleString("es-CR")}
             </p>
             <div className={styles.bottomActions}>
@@ -1909,7 +1995,9 @@ async function onConfirmarModificar(): Promise<void> {
                         );
 
                         const updated = await listProducts();
-                        setProducts(updated.filter(p => p.status === "ACTIVE"));
+                        setProducts(
+                          updated.filter((p) => p.status === "ACTIVE"),
+                        );
                         setSaleDraft((prev) => ({
                           ...prev,
                           lines: [
@@ -2161,7 +2249,6 @@ async function onConfirmarModificar(): Promise<void> {
               routeTicket
             />
           )}
-          
         </section>
       </div>
     );
@@ -2217,7 +2304,9 @@ async function onConfirmarModificar(): Promise<void> {
           selectedRowId={selectedRowId}
           emptyMessage="No hay rutas registradas."
           styles={styles}
-          formatInvoiceNumber={(sale) => `R-${String(sale.invoiceNumber).padStart(3, "0")}`}
+          formatInvoiceNumber={(sale) =>
+            `R-${String(sale.invoiceNumber).padStart(3, "0")}`
+          }
           formatPaymentMethod={mapPaymentMethod}
           formatStatus={mapStatus}
           onSelect={setSelectedRowId}
@@ -2234,18 +2323,26 @@ async function onConfirmarModificar(): Promise<void> {
           styles={styles}
           onCreate={() => navigate("/route-sales/new")}
           onModify={onAbrirModificar}
-          onView={() => selectedRowId && navigate(`/route-sales/${selectedRowId}/view`)}
+          onView={() =>
+            selectedRowId && navigate(`/route-sales/${selectedRowId}/view`)
+          }
           onPrint={() => {
-            const sale = sortedAndFilteredSales.find((s) => s.id === selectedRowId);
+            const sale = sortedAndFilteredSales.find(
+              (s) => s.id === selectedRowId,
+            );
             if (sale) printSale(sale);
           }}
           onWhatsapp={() => {
-            const sale = sortedAndFilteredSales.find((s) => s.id === selectedRowId);
+            const sale = sortedAndFilteredSales.find(
+              (s) => s.id === selectedRowId,
+            );
             if (sale) enviarWhatsApp(sale);
           }}
           onDelete={() => selectedRowId && void onDeleteSale(selectedRowId)}
           onCancel={() => selectedRowId && onCancelSale(selectedRowId)}
-          onPay={() => selectedRowId && navigate(`/route-sales/${selectedRowId}/edit`)}
+          onPay={() =>
+            selectedRowId && navigate(`/route-sales/${selectedRowId}/edit`)
+          }
           onDrivers={() => setShowDriversModal(true)}
           onExit={() => navigate("/dashboard")}
         />
@@ -2318,24 +2415,30 @@ async function onConfirmarModificar(): Promise<void> {
               >
                 ⚠️ Recuerde vaciar la memoria del datáfono antes de iniciar.
               </p>
-              {canCreateDriver && <div
-                style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}
-              >
-                <button
-                  className={styles.primaryButton}
-                  type="button"
-                  onClick={abrirCaja}
+              {canCreateDriver && (
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "0.5rem",
+                    marginTop: "0.5rem",
+                  }}
                 >
-                  Iniciar Caja
-                </button>
-                <button
-                  className={styles.button}
-                  type="button"
-                  onClick={() => setShowAbrirCajaModal(false)}
-                >
-                  Cancelar
-                </button>
-              </div>}
+                  <button
+                    className={styles.primaryButton}
+                    type="button"
+                    onClick={abrirCaja}
+                  >
+                    Iniciar Caja
+                  </button>
+                  <button
+                    className={styles.button}
+                    type="button"
+                    onClick={() => setShowAbrirCajaModal(false)}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -2416,13 +2519,15 @@ async function onConfirmarModificar(): Promise<void> {
                             >
                               Editar
                             </button>
-                            {canDeleteDriver && <button
-                              className={styles.dangerButton}
-                              type="button"
-                              onClick={() => void onDeleteDriver(driver)}
-                            >
-                              Eliminar
-                            </button>}
+                            {canDeleteDriver && (
+                              <button
+                                className={styles.dangerButton}
+                                type="button"
+                                onClick={() => void onDeleteDriver(driver)}
+                              >
+                                Eliminar
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -2441,7 +2546,9 @@ async function onConfirmarModificar(): Promise<void> {
             routeTicket
           />
         )}
-        {!saleToPrint && cierreToPrint && <CierreCajaPrint data={cierreToPrint} />}
+        {!saleToPrint && cierreToPrint && (
+          <CierreCajaPrint data={cierreToPrint} />
+        )}
         {whatsappModal?.show && (
           <div className={styles.modalBackdrop}>
             <div className={styles.modal}>
@@ -2509,53 +2616,53 @@ async function onConfirmarModificar(): Promise<void> {
           </div>
         )}
         {showModificarModal && (
-            <div className={styles.modalBackdrop}>
-              <div className={styles.modal}>
-                <header className={styles.modalHeader}>
-                  <h3>Modificar Factura</h3>
-                  <button
-                    className={styles.button}
-                    type="button"
-                    onClick={() => setShowModificarModal(false)}
-                  >
-                    Cerrar
-                  </button>
-                </header>
-                <div className={styles.field}>
-                  <label>Número de factura</label>
-                  <input
-                    type="number"
-                    autoFocus
-                    value={modificarInvoiceInput}
-                    onChange={(e) => setModificarInvoiceInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") void onConfirmarModificar();
-                      if (e.key === "Escape") setShowModificarModal(false);
-                    }}
-                    placeholder="Ej: 123"
-                  />
-                </div>
-                <div
-                  style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}
+          <div className={styles.modalBackdrop}>
+            <div className={styles.modal}>
+              <header className={styles.modalHeader}>
+                <h3>Modificar Factura</h3>
+                <button
+                  className={styles.button}
+                  type="button"
+                  onClick={() => setShowModificarModal(false)}
                 >
-                  <button
-                    className={styles.primaryButton}
-                    type="button"
-                    onClick={() => void onConfirmarModificar()}
-                  >
-                    Abrir
-                  </button>
-                  <button
-                    className={styles.button}
-                    type="button"
-                    onClick={() => setShowModificarModal(false)}
-                  >
-                    Cancelar
-                  </button>
-                </div>
+                  Cerrar
+                </button>
+              </header>
+              <div className={styles.field}>
+                <label>Número de factura</label>
+                <input
+                  type="number"
+                  autoFocus
+                  value={modificarInvoiceInput}
+                  onChange={(e) => setModificarInvoiceInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void onConfirmarModificar();
+                    if (e.key === "Escape") setShowModificarModal(false);
+                  }}
+                  placeholder="Ej: 123"
+                />
+              </div>
+              <div
+                style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}
+              >
+                <button
+                  className={styles.primaryButton}
+                  type="button"
+                  onClick={() => void onConfirmarModificar()}
+                >
+                  Abrir
+                </button>
+                <button
+                  className={styles.button}
+                  type="button"
+                  onClick={() => setShowModificarModal(false)}
+                >
+                  Cancelar
+                </button>
               </div>
             </div>
-          )}
+          </div>
+        )}
       </section>
     </div>
   );
@@ -2570,4 +2677,3 @@ function mapStatus(status: SaleStatus): string {
   }
   return "Pendiente";
 }
-

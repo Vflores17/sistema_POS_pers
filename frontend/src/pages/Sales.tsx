@@ -35,7 +35,10 @@ import SkeletonBlock from "../components/SkeletonBlock";
 import SaleHistoryFilters from "../components/SaleHistoryFilters";
 import SaleHistoryTable from "../components/SaleHistoryTable";
 import SalesHistoryActions from "../components/SalesHistoryActions";
-import { SaleFormHeader, SaleInvoiceField } from "../components/SaleFormPresentation";
+import {
+  SaleFormHeader,
+  SaleInvoiceField,
+} from "../components/SaleFormPresentation";
 import { useSaleHistoryFilters } from "../hooks/useSaleHistoryFilters";
 import { useSaleKeyboardShortcuts } from "../hooks/useSaleKeyboardShortcuts";
 import { useSalePayments } from "../hooks/useSalePayments";
@@ -267,16 +270,21 @@ export default function Sales(): ReactElement {
   }
 
   async function cerrarCaja(): Promise<void> {
-    const openedAt = caja.openedAt || (() => {
-      const legacyDate = new Date(caja.horaInicio);
-      return Number.isNaN(legacyDate.getTime()) ? "" : legacyDate.toISOString();
-    })();
+    const openedAt =
+      caja.openedAt ||
+      (() => {
+        const legacyDate = new Date(caja.horaInicio);
+        return Number.isNaN(legacyDate.getTime())
+          ? ""
+          : legacyDate.toISOString();
+      })();
     if (!openedAt) {
       setModal({
         show: true,
         type: "error",
         title: "No se puede cerrar la caja",
-        message: "La apertura actual no tiene una fecha válida. Cierra manualmente esta caja local y vuelve a abrirla.",
+        message:
+          "La apertura actual no tiene una fecha válida. Cierra manualmente esta caja local y vuelve a abrirla.",
         confirmLabel: "Aceptar",
         onConfirm: closeModal,
       });
@@ -286,9 +294,15 @@ export default function Sales(): ReactElement {
     const closedAt = new Date();
     let movements: SalePaymentMovement[];
     try {
-      movements = await listSalePaymentMovements(openedAt, closedAt.toISOString());
+      movements = await listSalePaymentMovements(
+        openedAt,
+        closedAt.toISOString(),
+      );
     } catch (cause) {
-      if (!isGloballyReportedError(cause)) notifyGlobalError(readError(cause, "No se pudieron consultar los pagos del turno."));
+      if (!isGloballyReportedError(cause))
+        notifyGlobalError(
+          readError(cause, "No se pudieron consultar los pagos del turno."),
+        );
       return;
     }
 
@@ -298,14 +312,18 @@ export default function Sales(): ReactElement {
       const createdAt = new Date(sale.createdAt).getTime();
       return createdAt >= fromTime && createdAt <= toTime;
     });
-    const totalByMethod = (method: PaymentMethod): number => movements
-      .filter((payment) => payment.method === method)
-      .reduce((sum, payment) => sum + Number(payment.amount), 0);
+    const totalByMethod = (method: PaymentMethod): number =>
+      movements
+        .filter((payment) => payment.method === method)
+        .reduce((sum, payment) => sum + Number(payment.amount), 0);
     const totalEfectivo = totalByMethod("CASH");
     const totalSinpe = totalByMethod("SINPE");
     const totalTransferencia = totalByMethod("TRANSFER");
     const totalTarjeta = totalByMethod("CARD");
-    const totalGastos = caja.gastos.reduce((sum, gasto) => sum + gasto.monto, 0);
+    const totalGastos = caja.gastos.reduce(
+      (sum, gasto) => sum + gasto.monto,
+      0,
+    );
     const efectivoNeto = totalEfectivo - totalGastos;
     const abonosAnteriores = movements.filter(
       (payment) => new Date(payment.saleCreatedAt).getTime() < fromTime,
@@ -484,7 +502,8 @@ export default function Sales(): ReactElement {
         canUpdate &&
         caja.abierta &&
         Boolean(selectedRowId) &&
-        (selectedSale?.status === "PENDING" || selectedSale?.status === "PARTIAL"),
+        (selectedSale?.status === "PENDING" ||
+          selectedSale?.status === "PARTIAL"),
       canOpenCashRegister: canOperateCaja && !caja.abierta,
       canCloseCashRegister: canOperateCaja && caja.abierta,
       onCreate: () => navigate("/sales/new"),
@@ -550,14 +569,19 @@ export default function Sales(): ReactElement {
     ) as HTMLElement;
     if (!selectedRow) return;
 
+    const thead = container.querySelector("thead") as HTMLElement;
+    const theadHeight = thead ? thead.offsetHeight : 0;
+
     const rowTop = selectedRow.offsetTop;
     const rowBottom = rowTop + selectedRow.offsetHeight;
-    const containerTop = container.scrollTop;
-    const containerBottom = container.scrollTop + container.clientHeight;
 
-    if (rowTop < containerTop) {
-      container.scrollTop = rowTop;
-    } else if (rowBottom > containerBottom) {
+    // Área realmente visible debajo del encabezado sticky
+    const visibleTop = container.scrollTop + theadHeight;
+    const visibleBottom = container.scrollTop + container.clientHeight;
+
+    if (rowTop < visibleTop) {
+      container.scrollTop = Math.max(0, rowTop - theadHeight);
+    } else if (rowBottom > visibleBottom) {
       container.scrollTop = rowBottom - container.clientHeight;
     }
   }, [selectedRowId, isFormScreen]);
@@ -1024,23 +1048,30 @@ export default function Sales(): ReactElement {
       message: "La factura quedará cancelada.",
       confirmLabel: "Cancelar factura",
       cancelLabel: "Volver",
-      onConfirm: () => void (async () => {
-        closeModal();
-        try {
-          const updated = await changeSaleStatus(saleId, "CANCELLED");
-          setSales((current) => current.map((sale) => sale.id === saleId ? updated : sale));
-        } catch (caught) {
-          if (isAdminAuthorizationCancelled(caught)) return;
-          setError(readError(caught, "No se pudo cancelar la venta."));
-        }
-      })(),
+      onConfirm: () =>
+        void (async () => {
+          closeModal();
+          try {
+            const updated = await changeSaleStatus(saleId, "CANCELLED");
+            setSales((current) =>
+              current.map((sale) => (sale.id === saleId ? updated : sale)),
+            );
+          } catch (caught) {
+            if (isAdminAuthorizationCancelled(caught)) return;
+            setError(readError(caught, "No se pudo cancelar la venta."));
+          }
+        })(),
       onCancel: closeModal,
     });
   }
 
   if (loading) {
     return (
-      <div className={styles.skeletonPage} aria-label="Cargando ventas" aria-busy="true">
+      <div
+        className={styles.skeletonPage}
+        aria-label="Cargando ventas"
+        aria-busy="true"
+      >
         <section className={styles.container}>
           <header className={styles.header}>
             <SkeletonBlock className={styles.skeletonHeading} />
@@ -1058,19 +1089,32 @@ export default function Sales(): ReactElement {
           </div>
           <div className={styles.skeletonTableWrap}>
             <div className={styles.skeletonTableHeader}>
-              {Array.from({ length: 6 }, (_, index) => <SkeletonBlock key={index} />)}
+              {Array.from({ length: 6 }, (_, index) => (
+                <SkeletonBlock key={index} />
+              ))}
             </div>
             {Array.from({ length: 8 }, (_, row) => (
               <div className={styles.skeletonTableRow} key={row}>
                 {Array.from({ length: 6 }, (_, column) => (
-                  <SkeletonBlock key={column} style={{ width: column === 2 ? "78%" : "62%" }} />
+                  <SkeletonBlock
+                    key={column}
+                    style={{ width: column === 2 ? "78%" : "62%" }}
+                  />
                 ))}
               </div>
             ))}
           </div>
           <div className={styles.skeletonBottomBar}>
-            <div>{Array.from({ length: 6 }, (_, index) => <SkeletonBlock key={index} />)}</div>
-            <div>{Array.from({ length: 3 }, (_, index) => <SkeletonBlock key={index} />)}</div>
+            <div>
+              {Array.from({ length: 6 }, (_, index) => (
+                <SkeletonBlock key={index} />
+              ))}
+            </div>
+            <div>
+              {Array.from({ length: 3 }, (_, index) => (
+                <SkeletonBlock key={index} />
+              ))}
+            </div>
           </div>
         </section>
       </div>
@@ -1094,11 +1138,13 @@ export default function Sales(): ReactElement {
         {" "}
         <section className={styles.container}>
           <SaleFormHeader
-            title={isEditScreen
-              ? "Modificar Venta"
-              : isViewScreen
-                ? "Visualización de Factura"
-                : "Nueva Venta"}
+            title={
+              isEditScreen
+                ? "Modificar Venta"
+                : isViewScreen
+                  ? "Visualización de Factura"
+                  : "Nueva Venta"
+            }
             error={error}
             styles={styles}
           />
@@ -1106,7 +1152,10 @@ export default function Sales(): ReactElement {
           <div className={styles.card}>
             {" "}
             <div className={styles.topGrid}>
-              <SaleInvoiceField invoiceNumber={invoiceNumber || "—"} styles={styles} />
+              <SaleInvoiceField
+                invoiceNumber={invoiceNumber || "—"}
+                styles={styles}
+              />
               <div className={styles.field}>
                 <label>
                   <u>B</u>uscar cliente
@@ -1206,61 +1255,105 @@ export default function Sales(): ReactElement {
               <div className={styles.field} style={{ gridColumn: "span 2" }}>
                 <label>Método de Pago</label>
                 <div className={styles.paymentsRow}>
-  {[
-    { key: "CASH" as PaymentMethod, label: "Efectivo" },
-    { key: "SINPE" as PaymentMethod, label: "SINPE" },
-    { key: "TRANSFER" as PaymentMethod, label: "Transferencia" },
-    { key: "CARD" as PaymentMethod, label: "Tarjeta" },
-  ].map((item) => (
-    <div key={item.key} className={styles.paymentItem}>
-      <label style={{ display: "flex", alignItems: "center", gap: "0.3rem", cursor: "pointer" }}>
-        <input
-          type="checkbox"
-          checked={paymentDraft[item.key].enabled}
-          onChange={(event) => onPaymentToggle(item.key, event.target.checked)}
-          disabled={paymentDraft[item.key].amounts.some((entry) => Boolean(entry.id)) || isViewScreen || (isEditScreen && !canUpdate)}
-        />
-        <span style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>{item.label}</span>
-      </label>
-      {paymentDraft[item.key].enabled && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-          {paymentDraft[item.key].amounts.map((entry, index) => (
-            <div key={entry.id ?? index} style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Monto"
-                value={entry.amount}
-                onChange={(e) => onPaymentAmountChange(item.key, index, e.target.value)}
-                disabled={Boolean(entry.id) || isViewScreen || (isEditScreen && !canUpdate)}
-                style={{ width: "90px" }}
-              />
-              {!entry.id && !isViewScreen && (!isEditScreen || canUpdate) && paymentDraft[item.key].amounts.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => onPaymentRemoveAmount(item.key, index)}
-                  style={{ background: "#dc2626", color: "white", border: "none", borderRadius: 4, padding: "0.2rem 0.4rem", cursor: "pointer", fontSize: "0.8rem" }}
-                >
-                  −
-                </button>
-              )}
-            </div>
-          ))}
-          {!isViewScreen && (!isEditScreen || canUpdate) && (
-            <button
-              type="button"
-              onClick={() => onPaymentAddAmount(item.key)}
-              style={{ background: "#16a34a", color: "white", border: "none", borderRadius: 4, padding: "0.2rem 0.4rem", cursor: "pointer", fontSize: "0.8rem", alignSelf: "flex-start" }}
-            >
-              +
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  ))}
-</div>
+                  {[
+                    { key: "CASH" as PaymentMethod, label: "Efectivo" },
+                    { key: "SINPE" as PaymentMethod, label: "SINPE" },
+                    {
+                      key: "TRANSFER" as PaymentMethod,
+                      label: "Transferencia",
+                    },
+                    { key: "CARD" as PaymentMethod, label: "Tarjeta" },
+                  ].map((item) => (
+                    <div key={item.key} className={styles.paymentItem}>
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.3rem",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={paymentDraft[item.key].enabled}
+                          onChange={(event) =>
+                            onPaymentToggle(item.key, event.target.checked)
+                          }
+                          disabled={
+                            paymentDraft[item.key].amounts.some((entry) =>
+                              Boolean(entry.id),
+                            ) ||
+                            isViewScreen ||
+                            (isEditScreen && !canUpdate)
+                          }
+                        />
+                        <span
+                          style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}
+                        >
+                          {item.label}
+                        </span>
+                      </label>
+                      {paymentDraft[item.key].enabled && (
+                        <div className={styles.paymentAmounts}>
+                          {paymentDraft[item.key].amounts.map(
+                            (entry, index) => (
+                              <div
+                                key={entry.id ?? index}
+                                className={styles.paymentAmountRow}
+                              >
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  placeholder="Monto"
+                                  value={entry.amount}
+                                  onChange={(e) =>
+                                    onPaymentAmountChange(
+                                      item.key,
+                                      index,
+                                      e.target.value,
+                                    )
+                                  }
+                                  disabled={
+                                    Boolean(entry.id) ||
+                                    isViewScreen ||
+                                    (isEditScreen && !canUpdate)
+                                  }
+                                />
+
+                                {!entry.id &&
+                                  !isViewScreen &&
+                                  paymentDraft[item.key].amounts.length > 1 && (
+                                    <button
+                                      type="button"
+                                      className={`${styles.paymentActionButton} ${styles.paymentRemoveButton}`}
+                                      onClick={() =>
+                                        onPaymentRemoveAmount(item.key, index)
+                                      }
+                                      title="Eliminar monto"
+                                    >
+                                      −
+                                    </button>
+                                  )}
+                              </div>
+                            ),
+                          )}
+
+                          {!isViewScreen && (
+                            <button
+                              type="button"
+                              className={`${styles.paymentActionButton} ${styles.paymentAddButton}`}
+                              onClick={() => onPaymentAddAmount(item.key)}
+                              title="Agregar monto"
+                            >
+                              +
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className={styles.field}>
                 <label>Vendedor</label>
@@ -1336,7 +1429,9 @@ export default function Sales(): ReactElement {
                   className={styles.primaryButton}
                   type="button"
                   disabled={!canCreateProduct}
-                  onClick={() => canCreateProduct && setShowCreateProductModal(true)}
+                  onClick={() =>
+                    canCreateProduct && setShowCreateProductModal(true)
+                  }
                 >
                   Crear producto <kbd>F2</kbd>
                 </button>
@@ -2227,18 +2322,26 @@ export default function Sales(): ReactElement {
           styles={styles}
           onCreate={() => navigate("/sales/new")}
           onModify={onAbrirModificar}
-          onView={() => selectedRowId && navigate(`/sales/${selectedRowId}/view`)}
+          onView={() =>
+            selectedRowId && navigate(`/sales/${selectedRowId}/view`)
+          }
           onPrint={() => {
-            const sale = sortedAndFilteredSales.find((s) => s.id === selectedRowId);
+            const sale = sortedAndFilteredSales.find(
+              (s) => s.id === selectedRowId,
+            );
             if (sale) printSale(sale);
           }}
           onWhatsapp={() => {
-            const sale = sortedAndFilteredSales.find((s) => s.id === selectedRowId);
+            const sale = sortedAndFilteredSales.find(
+              (s) => s.id === selectedRowId,
+            );
             if (sale) enviarWhatsApp(sale);
           }}
           onDelete={() => selectedRowId && void onDeleteSale(selectedRowId)}
           onCancel={() => selectedRowId && onCancelSale(selectedRowId)}
-          onPay={() => selectedRowId && navigate(`/sales/${selectedRowId}/edit`)}
+          onPay={() =>
+            selectedRowId && navigate(`/sales/${selectedRowId}/edit`)
+          }
           onExpenses={() => setShowGastosModal(true)}
           onOpenCashRegister={() => setShowAbrirCajaModal(true)}
           onCloseCashRegister={cerrarCaja}
@@ -2341,8 +2444,10 @@ export default function Sales(): ReactElement {
             productsById={productsById}
           />
         )}
-        {!saleToPrint && cierreToPrint && <CierreCajaPrint data={cierreToPrint} />}
-        
+        {!saleToPrint && cierreToPrint && (
+          <CierreCajaPrint data={cierreToPrint} />
+        )}
+
         {showGastosModal && (
           <div className={styles.modalBackdrop}>
             <div className={styles.modal}>
