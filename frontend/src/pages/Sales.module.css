@@ -65,37 +65,40 @@
 .table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed;
   font-size: 0.9rem;
 }
 
-.table th:nth-child(1),
-.table td:nth-child(1) {
+.tableContainer > .table {
+  table-layout: fixed;
+}
+
+.tableContainer > .table th:nth-child(1),
+.tableContainer > .table td:nth-child(1) {
   width: 12%;
 }
 
-.table th:nth-child(2),
-.table td:nth-child(2) {
+.tableContainer > .table th:nth-child(2),
+.tableContainer > .table td:nth-child(2) {
   width: 12%;
 }
 
-.table th:nth-child(3),
-.table td:nth-child(3) {
+.tableContainer > .table th:nth-child(3),
+.tableContainer > .table td:nth-child(3) {
   width: 30%;
 }
 
-.table th:nth-child(4),
-.table td:nth-child(4) {
+.tableContainer > .table th:nth-child(4),
+.tableContainer > .table td:nth-child(4) {
   width: 22%;
 }
 
-.table th:nth-child(5),
-.table td:nth-child(5) {
+.tableContainer > .table th:nth-child(5),
+.tableContainer > .table td:nth-child(5) {
   width: 12%;
 }
 
-.table th:nth-child(6),
-.table td:nth-child(6) {
+.tableContainer > .table th:nth-child(6),
+.tableContainer > .table td:nth-child(6) {
   width: 12%;
 }
 
@@ -379,6 +382,15 @@ kbd {
   font: inherit;
 }
 
+.gridTable input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+  font: inherit;
+}
+
 .gridTable select {
   border: 1px solid #d1d5db;
   border-radius: 6px;
@@ -487,6 +499,32 @@ kbd {
 
 .tableWrap {
   overflow-x: auto;
+}
+
+.productListTable {
+  table-layout: fixed;
+}
+
+.productListTable th:nth-child(1),
+.productListTable td:nth-child(1) {
+  width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.productListTable th:nth-child(2),
+.productListTable td:nth-child(2) {
+  width: 12%;
+}
+
+.productListTable th:nth-child(3),
+.productListTable td:nth-child(3) {
+  width: 18%;
+}
+
+.productListTable th:nth-child(4),
+.productListTable td:nth-child(4) {
+  width: 15%;
 }
 
 .invoiceNumber {

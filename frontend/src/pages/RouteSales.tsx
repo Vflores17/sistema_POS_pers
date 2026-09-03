@@ -1480,7 +1480,7 @@ export default function RouteSales(): ReactElement {
               </div>
             )}
             <div className={styles.gridScrollArea}>
-              <table className={styles.table}>
+              <table className={styles.gridTable}>
                 <thead>
                   <tr>
                     <th>Nombre</th>
@@ -2102,7 +2102,7 @@ export default function RouteSales(): ReactElement {
                   />
                 </div>
                 <div className={styles.tableWrap}>
-                  <table className={styles.table}>
+                  <table className={`${styles.table} ${styles.productListTable}`}>
                     <thead>
                       <tr>
                         <th>Nombre</th>
