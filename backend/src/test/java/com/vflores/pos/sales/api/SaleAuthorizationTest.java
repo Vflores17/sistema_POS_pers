@@ -20,6 +20,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -92,6 +93,22 @@ class SaleAuthorizationTest {
         when(saleService.findAll()).thenReturn(List.of());
         mockMvc.perform(get("/api/v1/sales")).andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/sales/{id}", SALE_ID)).andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = "SALE_READ")
+    void paymentMovementsAcceptUtcIsoPeriod() throws Exception {
+        OffsetDateTime from = OffsetDateTime.parse("2026-09-03T04:03:20Z");
+        OffsetDateTime to = OffsetDateTime.parse("2026-09-03T12:51:00.899Z");
+        when(saleService.findPaymentMovements(from, to)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/sales/payments")
+                        .param("from", "2026-09-03T04:03:20Z")
+                        .param("to", "2026-09-03T12:51:00.899Z"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(saleService).findPaymentMovements(from, to);
     }
 
     @Test

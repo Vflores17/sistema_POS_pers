@@ -9,10 +9,12 @@ import {
   getNextInvoiceNumber,
   getSaleById,
   listSales,
+  listSalePaymentMovements,
   updateSale,
   type PaymentMethod,
   type Sale,
   type SaleStatus,
+  type SalePaymentMovement,
   savePayments,
 } from "../api/sales";
 import styles from "./Sales.module.css";
@@ -74,22 +76,23 @@ const EMPTY_FORM: SaleFormDraft = {
 
 interface PaymentDraft {
   enabled: boolean;
-  amounts: string[];
+  amounts: { id?: string; amount: string }[];
 }
 
 type PaymentDraftState = Record<PaymentMethod, PaymentDraft>;
 
 const EMPTY_PAYMENTS: PaymentDraftState = {
-  CASH: { enabled: false, amounts: [""] },
-  SINPE: { enabled: false, amounts: [""] },
-  TRANSFER: { enabled: false, amounts: [""] },
-  CARD: { enabled: false, amounts: [""] },
+  CASH: { enabled: false, amounts: [{ amount: "" }] },
+  SINPE: { enabled: false, amounts: [{ amount: "" }] },
+  TRANSFER: { enabled: false, amounts: [{ amount: "" }] },
+  CARD: { enabled: false, amounts: [{ amount: "" }] },
 };
 
 interface CajaState {
   abierta: boolean;
   montoInicial: number;
   horaInicio: string;
+  openedAt: string;
   facturaIds: string[];
   pagos: { facturaId: string; method: string; amount: number }[];
   gastos: { id: string; descripcion: string; monto: number }[]; // 👈
@@ -106,6 +109,7 @@ function loadCaja(): CajaState {
         ...parsed,
         pagos: parsed.pagos ?? [],
         gastos: parsed.gastos ?? [], // 👈
+        openedAt: parsed.openedAt ?? "",
       };
     }
   } catch {
@@ -115,6 +119,7 @@ function loadCaja(): CajaState {
     abierta: false,
     montoInicial: 0,
     horaInicio: "",
+    openedAt: "",
     facturaIds: [],
     pagos: [],
     gastos: [],
@@ -229,6 +234,7 @@ export default function Sales(): ReactElement {
     horaCierre: string;
     montoInicial: number;
     cantidadFacturas: number;
+    cantidadAbonosAnteriores: number;
     totalEfectivo: number;
     totalSinpe: number;
     totalTransferencia: number;
@@ -263,6 +269,15 @@ export default function Sales(): ReactElement {
   const clientsById = useMemo(() => {
     return new Map(clients.map((client) => [client.id, client]));
   }, [clients]);
+
+  function printSale(sale: Sale): void {
+    setCierreToPrint(null);
+    setSaleToPrint(sale);
+    window.setTimeout(() => {
+      window.print();
+      setSaleToPrint(null);
+    }, 300);
+  }
 
   function onAbrirModificar(): void {
     const selected = sortedAndFilteredSales.find((s) => s.id === selectedRowId);
@@ -303,6 +318,7 @@ export default function Sales(): ReactElement {
       abierta: true,
       montoInicial: Number(montoInicialDraft),
       horaInicio: new Date().toLocaleString("es-CR"),
+      openedAt: new Date().toISOString(),
       facturaIds: [],
       pagos: [],
       gastos: [], // 👈
@@ -313,35 +329,57 @@ export default function Sales(): ReactElement {
     setShowAbrirCajaModal(false);
   }
 
-  function cerrarCaja(): void {
-    const facturasDeTurno = sales.filter((sale) =>
-      caja.facturaIds.includes(sale.id),
-    );
+  async function cerrarCaja(): Promise<void> {
+    const openedAt = caja.openedAt || (() => {
+      const legacyDate = new Date(caja.horaInicio);
+      return Number.isNaN(legacyDate.getTime()) ? "" : legacyDate.toISOString();
+    })();
+    if (!openedAt) {
+      setModal({
+        show: true,
+        type: "error",
+        title: "No se puede cerrar la caja",
+        message: "La apertura actual no tiene una fecha válida. Cierra manualmente esta caja local y vuelve a abrirla.",
+        confirmLabel: "Aceptar",
+        onConfirm: closeModal,
+      });
+      return;
+    }
 
-    const totalEfectivo = caja.pagos
-      .filter((p) => p.method === "CASH")
-      .reduce((sum, p) => sum + p.amount, 0);
+    const closedAt = new Date();
+    let movements: SalePaymentMovement[];
+    try {
+      movements = await listSalePaymentMovements(openedAt, closedAt.toISOString());
+    } catch (cause) {
+      if (!isGloballyReportedError(cause)) notifyGlobalError(readError(cause, "No se pudieron consultar los pagos del turno."));
+      return;
+    }
 
-    const totalSinpe = caja.pagos
-      .filter((p) => p.method === "SINPE")
-      .reduce((sum, p) => sum + p.amount, 0);
-
-    const totalTransferencia = caja.pagos
-      .filter((p) => p.method === "TRANSFER")
-      .reduce((sum, p) => sum + p.amount, 0);
-
-    const totalTarjeta = caja.pagos
-      .filter((p) => p.method === "CARD")
-      .reduce((sum, p) => sum + p.amount, 0);
-    const horaInicio = caja.horaInicio;
-    const totalGastos = caja.gastos.reduce((sum, g) => sum + g.monto, 0);
+    const fromTime = new Date(openedAt).getTime();
+    const toTime = closedAt.getTime();
+    const facturasDeTurno = sales.filter((sale) => {
+      const createdAt = new Date(sale.createdAt).getTime();
+      return createdAt >= fromTime && createdAt <= toTime;
+    });
+    const totalByMethod = (method: PaymentMethod): number => movements
+      .filter((payment) => payment.method === method)
+      .reduce((sum, payment) => sum + Number(payment.amount), 0);
+    const totalEfectivo = totalByMethod("CASH");
+    const totalSinpe = totalByMethod("SINPE");
+    const totalTransferencia = totalByMethod("TRANSFER");
+    const totalTarjeta = totalByMethod("CARD");
+    const totalGastos = caja.gastos.reduce((sum, gasto) => sum + gasto.monto, 0);
     const efectivoNeto = totalEfectivo - totalGastos;
+    const abonosAnteriores = movements.filter(
+      (payment) => new Date(payment.saleCreatedAt).getTime() < fromTime,
+    ).length;
 
     const mensaje = `
-🕐 Inicio: ${horaInicio}
+🕐 Inicio: ${caja.horaInicio}
 💵 Monto inicial: ₡${caja.montoInicial.toLocaleString("es-CR")}
 
 📋 Facturas del turno: ${facturasDeTurno.length}
+📥 Abonos a facturas anteriores: ${abonosAnteriores}
 
 💰 Efectivo: ₡${totalEfectivo.toLocaleString("es-CR")}
 📱 SINPE: ₡${totalSinpe.toLocaleString("es-CR")}
@@ -363,14 +401,16 @@ export default function Sales(): ReactElement {
       cancelLabel: "Cancelar",
       onConfirm: () => {
         closeModal();
-        generarExcelCierre(); // 👈 descargar Excel
+        generarExcelCierre(movements, fromTime, toTime);
+        setSaleToPrint(null);
 
         // 👈 guardar datos para imprimir
         setCierreToPrint({
           horaInicio: caja.horaInicio,
-          horaCierre: new Date().toLocaleString("es-CR"),
+          horaCierre: closedAt.toLocaleString("es-CR"),
           montoInicial: caja.montoInicial,
           cantidadFacturas: facturasDeTurno.length,
+          cantidadAbonosAnteriores: abonosAnteriores,
           totalEfectivo,
           totalSinpe,
           totalTransferencia,
@@ -388,6 +428,7 @@ export default function Sales(): ReactElement {
             abierta: false,
             montoInicial: 0,
             horaInicio: "",
+            openedAt: "",
             facturaIds: [],
             pagos: [],
             gastos: [],
@@ -720,8 +761,7 @@ export default function Sales(): ReactElement {
             (s) => s.id === selectedRowId,
           );
           if (sale) {
-            setSaleToPrint(sale);
-            setTimeout(() => window.print(), 300);
+            printSale(sale);
           }
         }
       }
@@ -899,7 +939,7 @@ export default function Sales(): ReactElement {
     ...prev,
     [method]: {
       enabled,
-      amounts: enabled ? prev[method].amounts : [""],
+      amounts: enabled ? prev[method].amounts : [{ amount: "" }],
     },
   }));
 }
@@ -907,7 +947,7 @@ export default function Sales(): ReactElement {
 function onPaymentAmountChange(method: PaymentMethod, index: number, amount: string): void {
   setPaymentDraft((prev) => {
     const newAmounts = [...prev[method].amounts];
-    newAmounts[index] = amount;
+    newAmounts[index] = { ...newAmounts[index], amount };
     return {
       ...prev,
       [method]: { ...prev[method], amounts: newAmounts },
@@ -920,7 +960,7 @@ function onPaymentAddAmount(method: PaymentMethod): void {
     ...prev,
     [method]: {
       ...prev[method],
-      amounts: [...prev[method].amounts, ""],
+      amounts: [...prev[method].amounts, { amount: "" }],
     },
   }));
 }
@@ -932,7 +972,7 @@ function onPaymentRemoveAmount(method: PaymentMethod, index: number): void {
       ...prev,
       [method]: {
         ...prev[method],
-        amounts: newAmounts.length > 0 ? newAmounts : [""],
+        amounts: newAmounts.length > 0 ? newAmounts : [{ amount: "" }],
       },
     };
   });
@@ -965,8 +1005,8 @@ function onPaymentRemoveAmount(method: PaymentMethod, index: number): void {
   const paymentTotal = useMemo(() => {
   return (Object.keys(paymentDraft) as PaymentMethod[]).reduce((sum, method) => {
     if (!paymentDraft[method].enabled) return sum;
-    return sum + paymentDraft[method].amounts.reduce((s, a) => {
-      const n = Number(a);
+    return sum + paymentDraft[method].amounts.reduce((s, entry) => {
+      const n = Number(entry.amount);
       return s + (Number.isNaN(n) ? 0 : n);
     }, 0);
   }, 0);
@@ -1037,18 +1077,18 @@ function onPaymentRemoveAmount(method: PaymentMethod, index: number): void {
           setClientSearch(clientName);
 
           const nextPayments: PaymentDraftState = {
-  CASH: { enabled: false, amounts: [""] },
-  SINPE: { enabled: false, amounts: [""] },
-  TRANSFER: { enabled: false, amounts: [""] },
-  CARD: { enabled: false, amounts: [""] },
+  CASH: { enabled: false, amounts: [{ amount: "" }] },
+  SINPE: { enabled: false, amounts: [{ amount: "" }] },
+  TRANSFER: { enabled: false, amounts: [{ amount: "" }] },
+  CARD: { enabled: false, amounts: [{ amount: "" }] },
 };
           for (const payment of sale.payments ?? []) {
   if (nextPayments[payment.method].enabled) {
-    nextPayments[payment.method].amounts.push(String(payment.amount));
+    nextPayments[payment.method].amounts.push({ id: payment.id, amount: String(payment.amount) });
   } else {
     nextPayments[payment.method] = {
       enabled: true,
-      amounts: [String(payment.amount)],
+      amounts: [{ id: payment.id, amount: String(payment.amount) }],
     };
   }
 }
@@ -1306,7 +1346,7 @@ function onPaymentRemoveAmount(method: PaymentMethod, index: number): void {
   .filter((method) => paymentDraft[method].enabled)
   .flatMap((method) =>
     paymentDraft[method].amounts
-      .map((amount) => ({ method, amount: Number(amount) }))
+      .map((entry) => ({ id: entry.id, method, amount: Number(entry.amount) }))
       .filter((p) => !Number.isNaN(p.amount) && p.amount > 0)
   );
     const paid = paymentsPayload.reduce((sum, p) => sum + p.amount, 0);
@@ -1389,8 +1429,7 @@ function onPaymentRemoveAmount(method: PaymentMethod, index: number): void {
 
       if (printAfterSave) {
         const saleToprint = await getSaleById(saved.id);
-        setSaleToPrint(saleToprint);
-        setTimeout(() => window.print(), 300);
+        printSale(saleToprint);
       }
       // Resetear formulario para nueva factura
       const next = await getNextInvoiceNumber();
@@ -1665,25 +1704,25 @@ function onPaymentRemoveAmount(method: PaymentMethod, index: number): void {
           type="checkbox"
           checked={paymentDraft[item.key].enabled}
           onChange={(event) => onPaymentToggle(item.key, event.target.checked)}
-          disabled={isViewScreen || (isEditScreen && !canUpdate)}
+          disabled={paymentDraft[item.key].amounts.some((entry) => Boolean(entry.id)) || isViewScreen || (isEditScreen && !canUpdate)}
         />
         <span style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>{item.label}</span>
       </label>
       {paymentDraft[item.key].enabled && (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-          {paymentDraft[item.key].amounts.map((amount, index) => (
-            <div key={index} style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
+          {paymentDraft[item.key].amounts.map((entry, index) => (
+            <div key={entry.id ?? index} style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
               <input
                 type="number"
                 min="0"
                 step="0.01"
                 placeholder="Monto"
-                value={amount}
+                value={entry.amount}
                 onChange={(e) => onPaymentAmountChange(item.key, index, e.target.value)}
-                disabled={isViewScreen || (isEditScreen && !canUpdate)}
+                disabled={Boolean(entry.id) || isViewScreen || (isEditScreen && !canUpdate)}
                 style={{ width: "90px" }}
               />
-              {!isViewScreen && (!isEditScreen || canUpdate) && paymentDraft[item.key].amounts.length > 1 && (
+              {!entry.id && !isViewScreen && (!isEditScreen || canUpdate) && paymentDraft[item.key].amounts.length > 1 && (
                 <button
                   type="button"
                   onClick={() => onPaymentRemoveAmount(item.key, index)}
@@ -2946,8 +2985,7 @@ function onPaymentRemoveAmount(method: PaymentMethod, index: number): void {
                   (s) => s.id === selectedRowId,
                 );
                 if (sale) {
-                  setSaleToPrint(sale);
-                  setTimeout(() => window.print(), 300);
+                  printSale(sale);
                 }
               }}
             >
@@ -3133,14 +3171,14 @@ function onPaymentRemoveAmount(method: PaymentMethod, index: number): void {
             </div>
           </div>
         )}
-        {saleToPrint && (
+        {saleToPrint && !cierreToPrint && (
           <TicketPrint
             sale={saleToPrint}
             client={clientsById.get(saleToPrint.clientId)}
             productsById={productsById}
           />
         )}
-        {cierreToPrint && <CierreCajaPrint data={cierreToPrint} />}
+        {!saleToPrint && cierreToPrint && <CierreCajaPrint data={cierreToPrint} />}
         
         {showGastosModal && (
           <div className={styles.modalBackdrop}>
@@ -3385,122 +3423,51 @@ function onPaymentRemoveAmount(method: PaymentMethod, index: number): void {
     </div>
   );
 
-  function generarExcelCierre(): void {
-    const facturasDeTurno = sales
-      .filter(
-        (sale) =>
-          caja.facturaIds.includes(sale.id) && sale.status !== "PENDING",
-      )
-      .sort(
-        (a, b) =>
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-      );
-
-    const filas: Record<string, string | number>[] = facturasDeTurno.map(
-      (sale) => {
-        const clientName =
-          clientsById.get(sale.clientId)?.name ?? sale.clientId;
-        const efectivo = caja.pagos
-          .filter((p) => p.facturaId === sale.id && p.method === "CASH")
-          .reduce((sum, p) => sum + p.amount, 0);
-        const sinpeTransfer = caja.pagos
-          .filter(
-            (p) =>
-              p.facturaId === sale.id &&
-              (p.method === "SINPE" || p.method === "TRANSFER"),
-          )
-          .reduce((sum, p) => sum + p.amount, 0);
-        const tarjeta = caja.pagos
-          .filter((p) => p.facturaId === sale.id && p.method === "CARD")
-          .reduce((sum, p) => sum + p.amount, 0);
-
-        return {
-          Cliente: clientName,
-          Efectivo: efectivo || "",
-          "": "",
-          "SINPE/Transferencia": sinpeTransfer || "",
-          Tarjeta: tarjeta || "",
-        };
-      },
-    );
-
-    // Fila vacía
-    filas.push({
-      Cliente: "",
-      Efectivo: "",
-      "": "",
-      "SINPE/Transferencia": "",
-      Tarjeta: "",
+  function generarExcelCierre(
+    movements: SalePaymentMovement[],
+    fromTime: number,
+    toTime: number,
+  ): void {
+    const emptyRow = (): Record<string, string | number> => ({
+      Factura: "", Fecha: "", Cliente: "", Movimiento: "",
+      Efectivo: "", SINPE: "", Transferencia: "", Tarjeta: "",
     });
-
-    // Total efectivo
-    const totalEfectivo = caja.pagos
-      .filter((p) => p.method === "CASH")
-      .reduce((sum, p) => sum + p.amount, 0);
-
-    filas.push({
-      Cliente: "TOTAL EFECTIVO",
-      Efectivo: totalEfectivo,
-      "": "",
-      "SINPE/Transferencia": "",
-      Tarjeta: "",
-    });
-
-    // Fila vacía
-    filas.push({
-      Cliente: "",
-      Efectivo: "",
-      "": "",
-      "SINPE/Transferencia": "",
-      Tarjeta: "",
-    });
-
-    // Gastos
+    const filas: Record<string, string | number>[] = movements.map((payment) => ({
+      Factura: payment.invoiceNumber,
+      Fecha: new Date(payment.createdAt).toLocaleString("es-CR"),
+      Cliente: clientsById.get(payment.clientId)?.name ?? payment.clientId,
+      Movimiento: new Date(payment.saleCreatedAt).getTime() < fromTime
+        ? "Abono de factura anterior"
+        : "Pago de factura del turno",
+      Efectivo: payment.method === "CASH" ? Number(payment.amount) : "",
+      SINPE: payment.method === "SINPE" ? Number(payment.amount) : "",
+      Transferencia: payment.method === "TRANSFER" ? Number(payment.amount) : "",
+      Tarjeta: payment.method === "CARD" ? Number(payment.amount) : "",
+    }));
+    const totalByMethod = (method: PaymentMethod): number => movements
+      .filter((payment) => payment.method === method)
+      .reduce((sum, payment) => sum + Number(payment.amount), 0);
+    const totalEfectivo = totalByMethod("CASH");
+    const totalSinpe = totalByMethod("SINPE");
+    const totalTransferencia = totalByMethod("TRANSFER");
+    const totalTarjeta = totalByMethod("CARD");
+    filas.push(emptyRow());
+    filas.push({ ...emptyRow(), Movimiento: "TOTALES RECIBIDOS", Efectivo: totalEfectivo,
+      SINPE: totalSinpe, Transferencia: totalTransferencia, Tarjeta: totalTarjeta });
+    filas.push(emptyRow());
     caja.gastos.forEach((gasto) => {
-      filas.push({
-        Cliente: gasto.descripcion,
-        Efectivo: gasto.monto,
-        "": "",
-        "SINPE/Transferencia": "",
-        Tarjeta: "",
-      });
+      filas.push({ ...emptyRow(), Cliente: gasto.descripcion, Movimiento: "Gasto", Efectivo: -gasto.monto });
     });
-
-    // Fila vacía
-    filas.push({
-      Cliente: "",
-      Efectivo: "",
-      "": "",
-      "SINPE/Transferencia": "",
-      Tarjeta: "",
-    });
-
-    // Efectivo neto
     const totalGastos = caja.gastos.reduce((sum, g) => sum + g.monto, 0);
-    const efectivoNeto = totalEfectivo - totalGastos;
-    filas.push({
-      Cliente: "EFECTIVO NETO",
-      Efectivo: efectivoNeto,
-      "": "",
-      "SINPE/Transferencia": "",
-      Tarjeta: "",
-    });
+    filas.push(emptyRow());
+    filas.push({ ...emptyRow(), Movimiento: "EFECTIVO NETO", Efectivo: totalEfectivo - totalGastos });
 
     const ws = XLSX.utils.json_to_sheet(filas);
-
-    // Fórmula de suma para TOTAL EFECTIVO
-    const dataRows = facturasDeTurno.length;
-    const totalRow = dataRows + 2; // +1 header +1 fila vacía
-    ws[`B${totalRow}`] = {
-      t: "n",
-      f: `SUM(B2:B${dataRows + 1})`,
-    };
-
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Cierre de Caja");
     XLSX.writeFile(
       wb,
-      `cierre_caja_${new Date().toLocaleDateString("es-CR").replace(/\//g, "-")}.xlsx`,
+      `cierre_caja_${new Date(toTime).toLocaleDateString("es-CR").replace(/\//g, "-")}.xlsx`,
     );
   }
 

@@ -19,8 +19,13 @@
     border-radius: 8px;
     background: #ffffff;
     box-shadow: 0 26px 70px rgba(32, 63, 42, 0.16);
+
     animation: shellEnter 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+/* =========================================================
+   PANEL BOTÁNICO
+========================================================= */
 
 .botanicalPanel {
     position: relative;
@@ -28,7 +33,9 @@
     flex-direction: column;
     justify-content: space-between;
     overflow: hidden;
+
     padding: 42px 38px;
+
     background: #315c3c;
     color: #f5f8f5;
 }
@@ -38,8 +45,10 @@
     position: absolute;
     top: -86px;
     right: -104px;
+
     width: 270px;
     height: 270px;
+
     border: 1px solid rgba(224, 237, 226, 0.16);
     border-radius: 50%;
 }
@@ -48,15 +57,23 @@
     content: "";
     position: absolute;
     inset: auto 0 0;
+
     height: 1px;
+
     background: rgba(255, 255, 255, 0.12);
 }
+
+/* =========================================================
+   LOGO PEQUEÑO
+========================================================= */
 
 .brandMark {
     position: relative;
     z-index: 2;
+
     width: 44px;
     height: 44px;
+
     border: 1px solid rgba(255, 255, 255, 0.32);
     border-radius: 6px;
 }
@@ -65,16 +82,21 @@
     position: absolute;
     left: 21px;
     bottom: 9px;
+
     width: 2px;
     height: 25px;
+
     background: #dceade;
+
     transform: rotate(2deg);
 }
 
 .brandLeaf {
     position: absolute;
+
     width: 14px;
     height: 9px;
+
     border: 1px solid #dceade;
     border-radius: 100% 0 100% 0;
 }
@@ -82,134 +104,414 @@
 .brandLeafLeft {
     top: 15px;
     left: 8px;
+
     transform: rotate(18deg);
 }
 
 .brandLeafRight {
     top: 9px;
     right: 7px;
+
     border-radius: 0 100% 0 100%;
+
     transform: rotate(-13deg);
 }
 
+/* =========================================================
+   TEXTO DEL PANEL
+========================================================= */
+
 .botanicalCopy {
     position: relative;
-    z-index: 2;
+    z-index: 5;
+
     max-width: 260px;
+
     margin: auto 0 225px;
 }
 
 .panelEyebrow {
     display: block;
+
     margin-bottom: 14px;
+
     color: #b9d1bd;
+
     font-size: 12px;
     font-weight: 700;
+
     text-transform: uppercase;
 }
 
 .botanicalCopy p {
     margin: 0;
+
     font-size: 26px;
     font-weight: 650;
     line-height: 1.2;
 }
 
+/* =========================================================
+   ESCENA DEL ÁRBOL
+========================================================= */
+
 .plantScene {
     position: absolute;
-    right: 16px;
-    bottom: -10px;
-    width: 260px;
-    height: 260px;
+
+    right: -12px;
+    bottom: -8px;
+
+    width: 365px;
+    height: 365px;
+
+    isolation: isolate;
+
+    pointer-events: none;
 }
 
-.sceneStem {
+.sceneAura {
     position: absolute;
+
+    z-index: -1;
+
+    left: 20px;
+    right: 15px;
+    bottom: 8px;
+
+    height: 315px;
+
+    border-radius: 50%;
+
+    background:
+        radial-gradient(
+            ellipse at 56% 60%,
+            rgba(173, 211, 158, 0.13),
+            rgba(107, 162, 113, 0.055) 43%,
+            transparent 72%
+        );
+
+    filter: blur(5px);
+}
+
+.treeSvg {
+    position: absolute;
+
+    inset: 0;
+
     z-index: 1;
-    right: 110px;
-    bottom: 63px;
-    width: 4px;
-    height: 160px;
-    border-radius: 4px;
-    background: #9cba9f;
-    transform: rotate(-6deg);
-    transform-origin: bottom center;
-    animation: stemSway 6.2s ease-in-out infinite;
+
+    width: 100%;
+    height: 100%;
+
+    overflow: visible;
+
+    filter:
+        drop-shadow(
+            0 13px 18px rgba(17, 37, 22, 0.18)
+        );
 }
 
-.sceneLeaf {
+/* =========================================================
+   TRONCO
+========================================================= */
+
+.mainTrunk {
+    fill: url(#trunkGradient);
+}
+
+.trunkHighlight {
+    fill: none;
+
+    stroke: rgba(228, 199, 161, 0.26);
+    stroke-width: 2;
+    stroke-linecap: round;
+
+    opacity: 0.7;
+}
+
+/* =========================================================
+   RAÍCES
+========================================================= */
+
+.treeRoots path {
+    fill: none;
+
+    stroke: #5d4635;
+    stroke-width: 5;
+    stroke-linecap: round;
+
+    opacity: 0.72;
+}
+
+/* =========================================================
+   RAMAS PRINCIPALES
+========================================================= */
+
+.branchStructure path {
+    fill: none;
+
+    stroke: url(#trunkGradient);
+    stroke-width: 6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* =========================================================
+   RAMAS FINAS
+========================================================= */
+
+.twigStructure path {
+    fill: none;
+
+    stroke: #745c44;
+    stroke-width: 2.3;
+    stroke-linecap: round;
+
+    opacity: 0.92;
+}
+
+/* =========================================================
+   HOJAS
+========================================================= */
+
+.leafGroup {
+    fill: url(#leafGradient);
+
+    transform-box: fill-box;
+    transform-origin: center;
+
+    will-change: transform;
+}
+
+/* profundidad y variedad */
+
+.leafGroup use:nth-child(2n) {
+    opacity: 0.9;
+}
+
+.leafGroup use:nth-child(3n) {
+    fill: url(#leafDarkGradient);
+    opacity: 0.8;
+}
+
+.leafGroup use:nth-child(4n) {
+    opacity: 0.67;
+}
+
+.leafGroup use:nth-child(5n) {
+    fill: #a5c77c;
+    opacity: 0.86;
+}
+
+.leafGroup use:nth-child(7n) {
+    fill: #6f9857;
+    opacity: 0.82;
+}
+
+/* =========================================================
+   MOVIMIENTO DEL FOLLAJE
+========================================================= */
+
+.leafGroupLeft {
+    transform-origin: 72% 82%;
+
+    animation:
+        foliageLeft
+        7.2s
+        ease-in-out
+        infinite;
+}
+
+.leafGroupCenter {
+    transform-origin: 50% 94%;
+
+    animation:
+        foliageCenter
+        8.4s
+        ease-in-out
+        infinite;
+}
+
+.leafGroupRight {
+    transform-origin: 25% 82%;
+
+    animation:
+        foliageRight
+        6.8s
+        ease-in-out
+        infinite;
+}
+
+@keyframes foliageLeft {
+    0%,
+    100% {
+        transform:
+            rotate(-0.2deg)
+            translate3d(0, 0, 0);
+    }
+
+    45% {
+        transform:
+            rotate(0.85deg)
+            translate3d(1.5px, -0.5px, 0);
+    }
+
+    72% {
+        transform:
+            rotate(0.3deg)
+            translate3d(0.5px, 0, 0);
+    }
+}
+
+@keyframes foliageCenter {
+    0%,
+    100% {
+        transform:
+            rotate(0deg)
+            translate3d(0, 0, 0);
+    }
+
+    35% {
+        transform:
+            rotate(-0.4deg)
+            translate3d(-0.8px, 0, 0);
+    }
+
+    68% {
+        transform:
+            rotate(0.45deg)
+            translate3d(1px, -0.4px, 0);
+    }
+}
+
+@keyframes foliageRight {
+    0%,
+    100% {
+        transform:
+            rotate(0.2deg)
+            translate3d(0, 0, 0);
+    }
+
+    48% {
+        transform:
+            rotate(-0.8deg)
+            translate3d(-1.4px, -0.4px, 0);
+    }
+
+    78% {
+        transform:
+            rotate(-0.2deg)
+            translate3d(-0.4px, 0, 0);
+    }
+}
+
+/* =========================================================
+   MACETA
+========================================================= */
+
+.pot {
+    filter:
+        drop-shadow(
+            0 7px 7px rgba(20, 36, 23, 0.22)
+        );
+}
+
+/* =========================================================
+   HOJAS FLOTANTES
+========================================================= */
+
+.floatingLeaf {
     position: absolute;
+
     z-index: 2;
-    width: 72px;
-    height: 40px;
-    border: 1px solid rgba(224, 237, 226, 0.36);
-    border-radius: 100% 0 100% 0;
-    background: #527c5c;
-    transform-origin: 100% 100%;
+
+    width: 13px;
+    height: 7px;
+
+    border-radius:
+        100% 5%
+        100% 5%;
+
+    background:
+        linear-gradient(
+            135deg,
+            #a8cb80,
+            #55784a
+        );
+
+    opacity: 0;
+
+    pointer-events: none;
+
+    animation:
+        leafFloat
+        17s
+        ease-in-out
+        infinite;
 }
 
-.sceneLeafOne {
-    top: 35px;
-    left: 56px;
-    transform: rotate(25deg);
-    animation: leafLeft 5.8s ease-in-out infinite;
+.floatingLeafOne {
+    top: 120px;
+    left: 38px;
+
+    animation-delay: -4s;
 }
 
-.sceneLeafTwo {
-    top: 98px;
-    left: 39px;
-    width: 82px;
-    height: 44px;
-    transform: rotate(10deg);
-    animation: leafLeftLow 6.4s ease-in-out 180ms infinite;
+.floatingLeafTwo {
+    top: 170px;
+    right: 31px;
+
+    animation-delay: -11s;
+    animation-duration: 20s;
 }
 
-.sceneLeafThree {
-    top: 62px;
-    right: 41px;
-    border-radius: 0 100% 0 100%;
-    transform: rotate(-19deg);
-    transform-origin: 0 100%;
-    animation: leafRight 5.5s ease-in-out 100ms infinite;
+@keyframes leafFloat {
+    0% {
+        opacity: 0;
+
+        transform:
+            translate3d(0, -4px, 0)
+            rotate(-10deg);
+    }
+
+    14% {
+        opacity: 0.3;
+    }
+
+    40% {
+        opacity: 0.38;
+
+        transform:
+            translate3d(7px, 10px, 0)
+            rotate(14deg);
+    }
+
+    70% {
+        opacity: 0.22;
+
+        transform:
+            translate3d(-2px, 27px, 0)
+            rotate(37deg);
+    }
+
+    100% {
+        opacity: 0;
+
+        transform:
+            translate3d(10px, 48px, 0)
+            rotate(65deg);
+    }
 }
 
-.sceneLeafFour {
-    top: 126px;
-    right: 21px;
-    width: 80px;
-    height: 43px;
-    border-radius: 0 100% 0 100%;
-    transform: rotate(-4deg);
-    transform-origin: 0 100%;
-    animation: leafRightLow 6s ease-in-out 260ms infinite;
-}
-
-.scenePotRim {
-    position: absolute;
-    z-index: 4;
-    right: 66px;
-    bottom: 57px;
-    width: 100px;
-    height: 15px;
-    border-radius: 3px;
-    background: #bc765a;
-}
-
-.scenePot {
-    position: absolute;
-    z-index: 3;
-    right: 74px;
-    bottom: 2px;
-    width: 84px;
-    height: 61px;
-    background: #a65f48;
-    clip-path: polygon(0 0, 100% 0, 82% 100%, 18% 100%);
-}
+/* =========================================================
+   PANEL DEL FORMULARIO
+========================================================= */
 
 .formPanel {
     display: flex;
     flex-direction: column;
     justify-content: center;
+
     padding: clamp(42px, 6vw, 72px);
 }
 
@@ -223,59 +525,88 @@
 
 .subtitle {
     margin: 0 0 12px;
+
     color: #4f7559;
+
     font-size: 13px;
     font-weight: 700;
+
     text-transform: uppercase;
 }
 
 .title {
     margin: 0;
+
     color: #203128;
+
     font-size: clamp(30px, 4vw, 40px);
     font-weight: 720;
+
     line-height: 1.12;
     letter-spacing: 0;
 }
 
 .welcome {
     margin: 13px 0 0;
+
     color: #6d776f;
+
     font-size: 15px;
     line-height: 1.55;
 }
 
+/* =========================================================
+   FORM
+========================================================= */
+
 .form {
     display: flex;
     flex-direction: column;
+
     gap: 20px;
 }
 
 .field {
     display: flex;
     flex-direction: column;
+
     gap: 8px;
 }
 
 .label {
     color: #38463d;
+
     font-size: 14px;
     font-weight: 650;
 }
 
+/* =========================================================
+   INPUTS
+========================================================= */
+
 .input {
     width: 100%;
     min-height: 48px;
+
     box-sizing: border-box;
+
     padding: 11px 14px;
+
     border: 1px solid #cbd6ce;
     border-radius: 6px;
+
     outline: none;
+
     background: #f9fbf9;
     color: #26352b;
+
     font: inherit;
     font-size: 15px;
-    transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+
+    transition:
+        border-color 160ms ease,
+        background-color 160ms ease,
+        box-shadow 160ms ease;
 }
 
 .input::placeholder {
@@ -283,112 +614,162 @@
 }
 
 .input:hover {
-    border-color: #9faf a3;
+    border-color: #9fafa3;
 }
 
 .input:focus {
     border-color: #3f704b;
+
     background: #ffffff;
-    box-shadow: 0 0 0 3px rgba(63, 112, 75, 0.13);
+
+    box-shadow:
+        0 0 0 3px rgba(63, 112, 75, 0.13);
 }
+
+/* =========================================================
+   ERROR LOGIN
+========================================================= */
 
 .error {
     position: relative;
+
     padding: 11px 13px 11px 37px;
+
     border: 1px solid #e3b9b1;
     border-radius: 6px;
+
     background: #fff7f5;
     color: #9b3e31;
+
     font-size: 14px;
     line-height: 1.45;
-    animation: errorEnter 180ms ease-out both;
+
+    animation:
+        errorEnter
+        180ms
+        ease-out
+        both;
 }
 
 .error::before {
     content: "!";
+
     position: absolute;
+
     top: 11px;
     left: 14px;
+
     width: 16px;
     height: 16px;
+
     display: grid;
     place-items: center;
+
     border: 1px solid currentColor;
     border-radius: 50%;
+
     font-size: 11px;
     font-weight: 800;
 }
 
+/* =========================================================
+   BOTÓN
+========================================================= */
+
 .button {
     min-height: 48px;
+
     margin-top: 4px;
+
     padding: 12px 20px;
+
     border: 1px solid #315c3c;
     border-radius: 6px;
+
     background: #315c3c;
     color: #ffffff;
+
     font: inherit;
     font-size: 15px;
     font-weight: 700;
+
     cursor: pointer;
-    transition: background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+
+    transition:
+        background-color 160ms ease,
+        box-shadow 160ms ease,
+        transform 160ms ease;
 }
 
 .button:hover:not(:disabled) {
     background: #264b31;
-    box-shadow: 0 9px 20px rgba(38, 75, 49, 0.2);
+
+    box-shadow:
+        0 9px 20px rgba(38, 75, 49, 0.2);
+
     transform: translateY(-2px);
 }
 
 .button:active:not(:disabled) {
     box-shadow: none;
-    transform: translateY(0) scale(0.99);
+
+    transform:
+        translateY(0)
+        scale(0.99);
 }
 
 .button:focus-visible {
-    outline: 3px solid rgba(49, 92, 60, 0.26);
+    outline:
+        3px solid rgba(49, 92, 60, 0.26);
+
     outline-offset: 3px;
 }
 
 .button:disabled {
     cursor: wait;
+
     opacity: 0.66;
 }
 
+/* =========================================================
+   ANIMACIONES GENERALES
+========================================================= */
+
 @keyframes shellEnter {
-    from { opacity: 0; transform: translateY(14px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+
+        transform:
+            translateY(14px);
+    }
+
+    to {
+        opacity: 1;
+
+        transform:
+            translateY(0);
+    }
 }
 
 @keyframes errorEnter {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+
+        transform:
+            translateY(-4px);
+    }
+
+    to {
+        opacity: 1;
+
+        transform:
+            translateY(0);
+    }
 }
 
-@keyframes stemSway {
-    0%, 100% { transform: rotate(-6deg); }
-    50% { transform: rotate(-4deg); }
-}
-
-@keyframes leafLeft {
-    0%, 100% { transform: rotate(25deg); }
-    50% { transform: rotate(28deg) translateY(-2px); }
-}
-
-@keyframes leafLeftLow {
-    0%, 100% { transform: rotate(10deg); }
-    50% { transform: rotate(7deg) translateY(1px); }
-}
-
-@keyframes leafRight {
-    0%, 100% { transform: rotate(-19deg); }
-    50% { transform: rotate(-22deg) translateY(-2px); }
-}
-
-@keyframes leafRightLow {
-    0%, 100% { transform: rotate(-4deg); }
-    50% { transform: rotate(-1deg) translateY(1px); }
-}
+/* =========================================================
+   TABLET / MOBILE
+========================================================= */
 
 @media (max-width: 760px) {
     .wrapper {
@@ -398,6 +779,7 @@
     .loginShell {
         width: min(100%, 470px);
         min-height: 0;
+
         grid-template-columns: 1fr;
     }
 
@@ -412,21 +794,31 @@
     .mobileMark {
         width: 42px;
         height: 42px;
+
         display: grid;
         place-items: center;
+
         margin-bottom: 30px;
+
         border-radius: 6px;
+
         background: #315c3c;
     }
 
     .mobileMark span {
         width: 18px;
         height: 12px;
+
         border: 1px solid #e4eee6;
         border-radius: 100% 0 100% 0;
+
         transform: rotate(30deg);
     }
 }
+
+/* =========================================================
+   CELULARES PEQUEÑOS
+========================================================= */
 
 @media (max-width: 420px) {
     .wrapper {
@@ -446,14 +838,17 @@
     }
 }
 
+/* =========================================================
+   ACCESIBILIDAD - REDUCIR MOVIMIENTO
+========================================================= */
+
 @media (prefers-reduced-motion: reduce) {
     .loginShell,
     .error,
-    .sceneStem,
-    .sceneLeafOne,
-    .sceneLeafTwo,
-    .sceneLeafThree,
-    .sceneLeafFour {
+    .leafGroupLeft,
+    .leafGroupCenter,
+    .leafGroupRight,
+    .floatingLeaf {
         animation: none;
     }
 

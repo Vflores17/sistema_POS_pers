@@ -5,8 +5,11 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 public record CreateSalePaymentRequest(
+        UUID id,
+
         @NotNull
         Sale.PaymentMethod method,
 
@@ -14,4 +17,7 @@ public record CreateSalePaymentRequest(
         @DecimalMin(value = "0.01")
         BigDecimal amount
 ) {
+    public CreateSalePaymentRequest(Sale.PaymentMethod method, BigDecimal amount) {
+        this(null, method, amount);
+    }
 }

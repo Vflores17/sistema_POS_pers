@@ -4,6 +4,7 @@ import com.vflores.pos.adminauthorizations.application.AdminAuthorizedOperationE
 import com.vflores.pos.sales.api.dto.CreateSaleRequest;
 import com.vflores.pos.sales.api.dto.CreateSalePaymentRequest;
 import com.vflores.pos.sales.api.dto.SaleResponse;
+import com.vflores.pos.sales.api.dto.SalePaymentMovementResponse;
 import com.vflores.pos.sales.api.dto.UpdateSaleRequest;
 import com.vflores.pos.sales.api.dto.UpdateSaleStatusRequest;
 import com.vflores.pos.sales.application.SaleService;
@@ -23,7 +24,10 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.format.annotation.DateTimeFormat;
+import java.time.OffsetDateTime;
 import org.springframework.web.bind.annotation.PatchMapping;
 import java.util.List;
 import java.util.UUID;
@@ -40,6 +44,14 @@ public class SaleController {
     @GetMapping
     public ResponseEntity<ApiResponse<List<SaleResponse>>> findAll() {
         return ResponseEntity.ok(ApiResponse.ok(saleService.findAll()));
+    }
+
+    @GetMapping("/payments")
+    public ResponseEntity<ApiResponse<List<SalePaymentMovementResponse>>> findPaymentMovements(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(saleService.findPaymentMovements(from, to)));
     }
 
     @GetMapping("/{id}")

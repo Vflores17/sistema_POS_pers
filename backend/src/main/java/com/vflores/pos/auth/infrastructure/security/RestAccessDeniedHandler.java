@@ -3,10 +3,13 @@ package com.vflores.pos.auth.infrastructure.security;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vflores.pos.adminauthorizations.application.AdminAuthorizationRequiredException;
 import com.vflores.pos.shared.exception.ApiErrorResponse;
+import com.vflores.pos.shared.logging.DiagnosticLogSupport;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
@@ -19,6 +22,8 @@ import java.util.List;
 @Component
 @RequiredArgsConstructor
 public class RestAccessDeniedHandler implements AccessDeniedHandler {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(RestAccessDeniedHandler.class);
 
     private final ObjectMapper objectMapper;
 
@@ -34,8 +39,15 @@ public class RestAccessDeniedHandler implements AccessDeniedHandler {
                 || Boolean.TRUE.equals(request.getAttribute(
                         AdminAuthorizationRequiredException.REQUEST_ATTRIBUTE
                 ));
+        String code = temporaryRequired ? "ADMIN_AUTHORIZATION_REQUIRED" : "ACCESS_DENIED";
+        LOGGER.warn(
+                "code={} user={} exceptionType={} technicalMessage=Authorization rejected",
+                code,
+                DiagnosticLogSupport.currentUser(),
+                accessDeniedException.getClass().getName()
+        );
         response.getWriter().write(objectMapper.writeValueAsString(ApiErrorResponse.of(
-                temporaryRequired ? "ADMIN_AUTHORIZATION_REQUIRED" : "ACCESS_DENIED",
+                code,
                 temporaryRequired
                         ? "Temporary administrator authorization is required"
                         : "You do not have permission for this action",

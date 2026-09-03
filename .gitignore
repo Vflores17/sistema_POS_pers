@@ -1,4 +1,6 @@
 target/
+logs/
+backend/logs/
 backend/target/
 frontend/public/favicon.svg
 frontend/package-lock.json

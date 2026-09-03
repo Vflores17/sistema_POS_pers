@@ -29,6 +29,8 @@ spring:
     write-dates-as-timestamps: false
 
 logging:
+  file:
+    path: ${LOG_PATH:logs}
   level:
     org.springframework.security: INFO
     org.hibernate.SQL: INFO

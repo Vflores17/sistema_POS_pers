@@ -15,6 +15,7 @@ import com.vflores.pos.routesales.api.dto.CreateRouteSaleRequest;
 import com.vflores.pos.routesales.api.dto.RouteSaleDetailResponse;
 import com.vflores.pos.routesales.api.dto.RouteSaleItemRequest;
 import com.vflores.pos.routesales.api.dto.RouteSalePaymentResponse;
+import com.vflores.pos.routesales.api.dto.RouteSalePaymentMovementResponse;
 import com.vflores.pos.routesales.api.dto.RouteSaleResponse;
 import com.vflores.pos.routesales.api.dto.UpdateRouteSaleRequest;
 import com.vflores.pos.routesales.domain.model.RouteSale;
@@ -29,6 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,6 +40,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.Comparator;
+import java.util.HashSet;
 
 @Service
 @RequiredArgsConstructor
@@ -131,26 +134,51 @@ public class RouteSaleService {
         RouteSale routeSale = routeSaleRepository.findByIdWithDetails(routeSaleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Route sale not found: " + routeSaleId));
 
-        routeSalePaymentRepository.deleteByRouteSaleId(routeSaleId);
-        routeSale.getPayments().clear();
+        List<CreateRouteSalePaymentRequest> requestedPayments = payments == null ? List.of() : payments;
+        boolean identifiedRequest = requestedPayments.stream().anyMatch(request -> request.id() != null);
+        Set<UUID> referencedIds = new HashSet<>();
+        Set<UUID> legacyMatches = new HashSet<>();
 
-        BigDecimal paidAmount = BigDecimal.ZERO;
-        if (payments != null) {
-            for (CreateRouteSalePaymentRequest request : payments) {
-                BigDecimal amount = request.amount();
-                if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-                    throw new ConflictException("Payment amount must be greater than 0");
+        for (CreateRouteSalePaymentRequest request : requestedPayments) {
+            validatePaymentAmount(request.amount());
+            if (request.id() != null) {
+                if (!referencedIds.add(request.id())) {
+                    throw new ConflictException("Payment cannot be referenced more than once");
                 }
-
-                RouteSalePayment payment = RouteSalePayment.builder()
-                        .routeSale(routeSale)
-                        .method(request.method())
-                        .amount(amount)
-                        .build();
-                routeSale.getPayments().add(payment);
-                paidAmount = paidAmount.add(amount);
+                RouteSalePayment existing = routeSale.getPayments().stream()
+                        .filter(payment -> request.id().equals(payment.getId()))
+                        .findFirst()
+                        .orElseThrow(() -> new ConflictException("Payment does not belong to this route sale"));
+                if (existing.getMethod() != request.method()
+                        || existing.getAmount().compareTo(request.amount()) != 0) {
+                    throw new ConflictException("Existing payments cannot be modified");
+                }
+                continue;
             }
+
+            if (!identifiedRequest) {
+                RouteSalePayment legacyMatch = routeSale.getPayments().stream()
+                        .filter(payment -> !legacyMatches.contains(payment.getId()))
+                        .filter(payment -> payment.getMethod() == request.method())
+                        .filter(payment -> payment.getAmount().compareTo(request.amount()) == 0)
+                        .findFirst()
+                        .orElse(null);
+                if (legacyMatch != null) {
+                    legacyMatches.add(legacyMatch.getId());
+                    continue;
+                }
+            }
+
+            routeSale.getPayments().add(RouteSalePayment.builder()
+                    .routeSale(routeSale)
+                    .method(request.method())
+                    .amount(request.amount())
+                    .build());
         }
+
+        BigDecimal paidAmount = routeSale.getPayments().stream()
+                .map(RouteSalePayment::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         if (paidAmount.compareTo(routeSale.getTotal()) > 0) {
             throw new ConflictException("Payment total cannot exceed route sale total");
@@ -158,12 +186,40 @@ public class RouteSaleService {
 
         if (paidAmount.compareTo(routeSale.getTotal()) == 0 && paidAmount.compareTo(BigDecimal.ZERO) > 0) {
             routeSale.setStatus(RouteSale.RouteStatus.PAID);
+        } else if (paidAmount.compareTo(BigDecimal.ZERO) > 0) {
+            routeSale.setStatus(RouteSale.RouteStatus.PARTIAL);
         } else {
             routeSale.setStatus(RouteSale.RouteStatus.PENDING);
         }
 
-        RouteSale saved = routeSaleRepository.save(routeSale);
+        RouteSale saved = routeSaleRepository.saveAndFlush(routeSale);
         return toResponse(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public List<RouteSalePaymentMovementResponse> findPaymentMovements(OffsetDateTime from, OffsetDateTime to) {
+        if (from.isAfter(to)) {
+            throw new ConflictException("Payment period start must not be after its end");
+        }
+        return routeSalePaymentRepository
+                .findByCreatedAtGreaterThanEqualAndCreatedAtLessThanEqualOrderByCreatedAtAsc(from, to)
+                .stream()
+                .map(payment -> new RouteSalePaymentMovementResponse(
+                        payment.getId(),
+                        payment.getRouteSale().getId(),
+                        payment.getRouteSale().getInvoiceNumber(),
+                        payment.getRouteSale().getClientId(),
+                        payment.getRouteSale().getCreatedAt(),
+                        payment.getMethod(),
+                        payment.getAmount(),
+                        payment.getCreatedAt()))
+                .toList();
+    }
+
+    private void validatePaymentAmount(BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ConflictException("Payment amount must be greater than 0");
+        }
     }
 
     @Transactional(readOnly = true)

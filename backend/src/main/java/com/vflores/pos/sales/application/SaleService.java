@@ -7,6 +7,7 @@ import com.vflores.pos.sales.api.dto.CreateSalePaymentRequest;
 import com.vflores.pos.sales.api.dto.SaleDetailResponse;
 import com.vflores.pos.sales.api.dto.SaleItemRequest;
 import com.vflores.pos.sales.api.dto.SalePaymentResponse;
+import com.vflores.pos.sales.api.dto.SalePaymentMovementResponse;
 import com.vflores.pos.sales.api.dto.SaleResponse;
 import com.vflores.pos.sales.api.dto.UpdateSaleRequest;
 import com.vflores.pos.sales.domain.model.Sale;
@@ -27,6 +28,7 @@ import com.vflores.pos.products.domain.model.ProductPrice;
 import com.vflores.pos.products.domain.model.ProductPriceType;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -36,6 +38,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.Comparator;
+import java.util.HashSet;
 
 @Service
 @RequiredArgsConstructor
@@ -340,30 +343,55 @@ BigDecimal subtotal = price.multiply(item.quantity());            lines.add(new 
         Sale sale = saleRepository.findByIdWithDetails(saleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Sale not found: " + saleId));
 
-        salePaymentRepository.deleteBySaleId(saleId);
-        sale.getPayments().clear();
+        List<CreateSalePaymentRequest> requestedPayments = payments == null ? List.of() : payments;
+        boolean identifiedRequest = requestedPayments.stream().anyMatch(request -> request.id() != null);
+        Set<UUID> referencedIds = new HashSet<>();
+        Set<UUID> legacyMatches = new HashSet<>();
 
-        BigDecimal paidAmount = BigDecimal.ZERO;
-        if (payments != null) {
-            for (CreateSalePaymentRequest request : payments) {
-                BigDecimal amount = request.amount();
-                if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-                    throw new ConflictException("Payment amount must be greater than 0");
+        for (CreateSalePaymentRequest request : requestedPayments) {
+            validatePaymentAmount(request.amount());
+            if (request.id() != null) {
+                if (!referencedIds.add(request.id())) {
+                    throw new ConflictException("Payment cannot be referenced more than once");
                 }
-
-                SalePayment payment = SalePayment.builder()
-                        .sale(sale)
-                        .method(request.method())
-                        .amount(amount)
-                        .build();
-                sale.getPayments().add(payment);
-                paidAmount = paidAmount.add(amount);
+                SalePayment existing = sale.getPayments().stream()
+                        .filter(payment -> request.id().equals(payment.getId()))
+                        .findFirst()
+                        .orElseThrow(() -> new ConflictException("Payment does not belong to this sale"));
+                if (existing.getMethod() != request.method()
+                        || existing.getAmount().compareTo(request.amount()) != 0) {
+                    throw new ConflictException("Existing payments cannot be modified");
+                }
+                continue;
             }
+
+            if (!identifiedRequest) {
+                SalePayment legacyMatch = sale.getPayments().stream()
+                        .filter(payment -> !legacyMatches.contains(payment.getId()))
+                        .filter(payment -> payment.getMethod() == request.method())
+                        .filter(payment -> payment.getAmount().compareTo(request.amount()) == 0)
+                        .findFirst()
+                        .orElse(null);
+                if (legacyMatch != null) {
+                    legacyMatches.add(legacyMatch.getId());
+                    continue;
+                }
+            }
+
+            sale.getPayments().add(SalePayment.builder()
+                    .sale(sale)
+                    .method(request.method())
+                    .amount(request.amount())
+                    .build());
         }
-        /*
+
+        BigDecimal paidAmount = sale.getPayments().stream()
+                .map(SalePayment::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
         if (paidAmount.compareTo(sale.getTotal()) > 0) {
             throw new ConflictException("Payment total cannot exceed sale total");
-        }*/
+        }
 
         if (paidAmount.compareTo(BigDecimal.ZERO) == 0) {
             sale.setStatus(Sale.SaleStatus.PENDING);
@@ -373,8 +401,34 @@ BigDecimal subtotal = price.multiply(item.quantity());            lines.add(new 
             sale.setStatus(Sale.SaleStatus.PAID);
         }
 
-        Sale saved = saleRepository.save(sale);
+        Sale saved = saleRepository.saveAndFlush(sale);
         return toResponse(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public List<SalePaymentMovementResponse> findPaymentMovements(OffsetDateTime from, OffsetDateTime to) {
+        if (from.isAfter(to)) {
+            throw new ConflictException("Payment period start must not be after its end");
+        }
+        return salePaymentRepository
+                .findByCreatedAtGreaterThanEqualAndCreatedAtLessThanEqualOrderByCreatedAtAsc(from, to)
+                .stream()
+                .map(payment -> new SalePaymentMovementResponse(
+                        payment.getId(),
+                        payment.getSale().getId(),
+                        payment.getSale().getInvoiceNumber(),
+                        payment.getSale().getClientId(),
+                        payment.getSale().getCreatedAt(),
+                        payment.getMethod(),
+                        payment.getAmount(),
+                        payment.getCreatedAt()))
+                .toList();
+    }
+
+    private void validatePaymentAmount(BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ConflictException("Payment amount must be greater than 0");
+        }
     }
 
     private List<SaleDetailResponse> mapDetails(List<SaleDetail> details) {

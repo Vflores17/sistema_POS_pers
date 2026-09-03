@@ -52,8 +52,16 @@ export interface SalePayment {
 }
 
 export interface CreateSalePaymentPayload {
+  id?: string;
   method: PaymentMethod;
   amount: number;
+}
+
+export interface SalePaymentMovement extends SalePayment {
+  invoiceNumber: number;
+  clientId: string;
+  saleCreatedAt: string;
+  createdAt: string;
 }
 
 export async function listSales(): Promise<Sale[]> {
@@ -62,6 +70,15 @@ export async function listSales(): Promise<Sale[]> {
     headers: buildHeaders(false),
   });
   return parseApiResponse<Sale[]>(response, "No se pudieron cargar las ventas.");
+}
+
+export async function listSalePaymentMovements(from: string, to: string): Promise<SalePaymentMovement[]> {
+  const params = new URLSearchParams({ from, to });
+  const response = await fetchWithAuth(`${API_URL}/sales/payments?${params.toString()}`, {
+    method: "GET",
+    headers: buildHeaders(false),
+  });
+  return parseApiResponse<SalePaymentMovement[]>(response, "No se pudieron cargar los movimientos de caja.");
 }
 
 export async function getSaleById(id: string): Promise<Sale> {
