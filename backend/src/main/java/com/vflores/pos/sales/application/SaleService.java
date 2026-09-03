@@ -30,7 +30,6 @@ import com.vflores.pos.products.domain.model.ProductPriceType;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -39,6 +38,13 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.Comparator;
 import java.util.HashSet;
+
+import static com.vflores.pos.shared.application.AuthenticatedUserSupport.getCurrentUserId;
+import static com.vflores.pos.shared.application.InventoryAdjustmentSupport.aggregateQuantities;
+import static com.vflores.pos.shared.application.InventoryAdjustmentSupport.applyStockDelta;
+import static com.vflores.pos.shared.application.InventoryAdjustmentSupport.restoreStockFromDetails;
+import static com.vflores.pos.shared.application.PaymentValidationSupport.requirePositiveAmount;
+import static com.vflores.pos.shared.application.PaymentValidationSupport.requireValidPeriod;
 
 @Service
 @RequiredArgsConstructor
@@ -104,7 +110,7 @@ public class SaleService {
         }
 
         // 2. Restaurar stock anterior (rollback de venta vieja)
-        restoreStockFromDetails(sale.getDetails());
+        restoreStockFromDetails(sale.getDetails(), SaleDetail::getProduct, SaleDetail::getQuantity);
 
         // 3. Recalcular nueva venta (VALIDA TODO)
         SaleComputation computation = computeSale(request.clientId(),request.items());
@@ -139,7 +145,7 @@ public class SaleService {
         Sale sale = saleRepository.findByIdWithDetails(saleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Sale not found: " + saleId));
 
-        restoreStockFromDetails(sale.getDetails());
+        restoreStockFromDetails(sale.getDetails(), SaleDetail::getProduct, SaleDetail::getQuantity);
         saleRepository.delete(sale);
     }
 
@@ -158,7 +164,8 @@ public class SaleService {
             case NEW -> priceType = ProductPriceType.NEW; // 👈
             default -> throw new IllegalStateException("Unknown client type: " + clientType);
         }
-Map<UUID, BigDecimal> requestedQuantities = aggregateRequestedQuantities(items);        Set<UUID> productIds = requestedQuantities.keySet();
+Map<UUID, BigDecimal> requestedQuantities = aggregateQuantities(
+                items, SaleItemRequest::productId, SaleItemRequest::quantity);        Set<UUID> productIds = requestedQuantities.keySet();
 
         Map<UUID, Product> productsById = productRepository.findAllById(productIds)
                 .stream()
@@ -212,28 +219,6 @@ BigDecimal subtotal = price.multiply(item.quantity());            lines.add(new 
             }
         }
     }
-
-    private void applyStockDelta(Map<UUID, BigDecimal> quantities, Map<UUID, Product> productsById, int multiplier) {
-    for (Map.Entry<UUID, BigDecimal> entry : quantities.entrySet()) {
-        Product product = productsById.get(entry.getKey());
-        BigDecimal delta = entry.getValue().multiply(BigDecimal.valueOf(multiplier));
-        int newStock = product.getStock() + delta.intValue();
-        product.setStock(newStock);
-    }
-}
-
-    private void restoreStockFromDetails(List<SaleDetail> details) {
-    Map<UUID, BigDecimal> soldQuantities = new LinkedHashMap<>();
-    Map<UUID, Product> productsById = new LinkedHashMap<>();
-
-    for (SaleDetail detail : details) {
-        UUID productId = detail.getProduct().getId();
-        soldQuantities.merge(productId, detail.getQuantity(), BigDecimal::add);
-        productsById.put(productId, detail.getProduct());
-    }
-
-    applyStockDelta(soldQuantities, productsById, 1);
-}
 
     private List<SaleDetail> buildSaleDetails(Sale sale, List<SaleLineData> lines) {
     List<SaleDetail> details = new ArrayList<>();
@@ -294,15 +279,6 @@ BigDecimal subtotal = price.multiply(item.quantity());            lines.add(new 
     ) {
     }
 
-    private Map<UUID, BigDecimal> aggregateRequestedQuantities(List<SaleItemRequest> items) {
-    Map<UUID, BigDecimal> requestedQuantities = new LinkedHashMap<>();
-    for (SaleItemRequest item : items) {
-        requestedQuantities.merge(item.productId(), item.quantity(), BigDecimal::add);
-    }
-    return requestedQuantities;
-}
-
-
     @Transactional
     public SaleResponse updateStatus(UUID saleId, Sale.SaleStatus newStatus) {
 
@@ -349,7 +325,7 @@ BigDecimal subtotal = price.multiply(item.quantity());            lines.add(new 
         Set<UUID> legacyMatches = new HashSet<>();
 
         for (CreateSalePaymentRequest request : requestedPayments) {
-            validatePaymentAmount(request.amount());
+            requirePositiveAmount(request.amount());
             if (request.id() != null) {
                 if (!referencedIds.add(request.id())) {
                     throw new ConflictException("Payment cannot be referenced more than once");
@@ -407,9 +383,7 @@ BigDecimal subtotal = price.multiply(item.quantity());            lines.add(new 
 
     @Transactional(readOnly = true)
     public List<SalePaymentMovementResponse> findPaymentMovements(OffsetDateTime from, OffsetDateTime to) {
-        if (from.isAfter(to)) {
-            throw new ConflictException("Payment period start must not be after its end");
-        }
+        requireValidPeriod(from, to);
         return salePaymentRepository
                 .findByCreatedAtGreaterThanEqualAndCreatedAtLessThanEqualOrderByCreatedAtAsc(from, to)
                 .stream()
@@ -423,12 +397,6 @@ BigDecimal subtotal = price.multiply(item.quantity());            lines.add(new 
                         payment.getAmount(),
                         payment.getCreatedAt()))
                 .toList();
-    }
-
-    private void validatePaymentAmount(BigDecimal amount) {
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new ConflictException("Payment amount must be greater than 0");
-        }
     }
 
     private List<SaleDetailResponse> mapDetails(List<SaleDetail> details) {
@@ -453,14 +421,6 @@ BigDecimal subtotal = price.multiply(item.quantity());            lines.add(new 
                         payment.getCreatedAt()
                 ))
                 .toList();
-    }
-
-    private UUID getCurrentUserId() {
-        var authentication = org.springframework.security.core.context.SecurityContextHolder
-                .getContext().getAuthentication();
-        var principal = (com.vflores.pos.auth.infrastructure.security.AuthenticatedUser) 
-                authentication.getPrincipal();
-        return principal.getId();
     }
 
     @Transactional(readOnly = true)

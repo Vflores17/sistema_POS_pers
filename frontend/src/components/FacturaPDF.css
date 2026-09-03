@@ -1,0 +1,141 @@
+.factura-pdf {
+    position: fixed;
+    left: -9999px;
+    top: 0;
+    width: 216mm;
+    /* tamaño carta */
+    background: white;
+}
+
+@media print {
+    @page {
+        margin: 20mm;
+        size: letter;
+    }
+
+    body>* {
+        display: none !important;
+    }
+
+    .factura-pdf {
+        display: block !important;
+        width: 100%;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        color: black;
+    }
+
+    .factura-gracias {
+        text-align: center;
+        font-weight: bold;
+        font-size: 18px;
+        margin-bottom: 8mm;
+    }
+
+    .factura-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 4mm;
+    }
+
+    .factura-numero {
+        font-weight: bold;
+        font-size: 20px;
+    }
+
+    .factura-fecha {
+        text-align: right;
+        font-size: 13px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .factura-label {
+        margin: 2mm 0 0 0;
+        font-size: 13px;
+    }
+
+    .factura-cliente {
+        margin: 0 0 4mm 0;
+        font-size: 16px;
+        font-weight: bold;
+    }
+
+    .factura-divider {
+        border-top: 1px dashed black;
+        margin: 3mm 0;
+    }
+
+    .factura-tabla-productos {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .factura-tabla-productos th {
+        text-align: left;
+        font-size: 13px;
+        padding-bottom: 2mm;
+        border-bottom: 1px dashed black;
+    }
+
+    .factura-tabla-productos td {
+        padding: 1mm 0;
+        font-size: 14px;
+    }
+
+    .factura-col-cant {
+        width: 20mm;
+        text-align: center;
+    }
+
+    .factura-col-desc {
+        width: auto;
+        padding-left: 5mm;
+    }
+
+    .factura-col-total {
+        width: 35mm;
+        text-align: right;
+    }
+
+    .factura-total-cant {
+        font-weight: bold;
+        margin: 1mm 0;
+        font-size: 14px;
+    }
+
+    .factura-tabla-pagos {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1mm 0;
+    }
+
+    .factura-tabla-pagos td {
+        padding: 1mm 0;
+        font-size: 14px;
+    }
+
+    .factura-tabla-total {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1mm 0;
+    }
+
+    .factura-tabla-total td {
+        padding: 1mm 0;
+        font-size: 16px;
+    }
+
+    .factura-derecha {
+        text-align: right;
+    }
+
+    .factura-estado {
+        text-align: center;
+        font-weight: bold;
+        font-size: 16px;
+        margin-top: 5mm;
+    }
+}

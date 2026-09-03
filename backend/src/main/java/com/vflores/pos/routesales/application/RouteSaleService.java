@@ -1,6 +1,5 @@
 package com.vflores.pos.routesales.application;
 
-import com.vflores.pos.auth.infrastructure.security.AuthenticatedUser;
 import com.vflores.pos.clients.domain.model.Client;
 import com.vflores.pos.clients.domain.model.ClientType;
 import com.vflores.pos.clients.domain.repository.ClientRepository;
@@ -32,7 +31,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -41,6 +39,13 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.Comparator;
 import java.util.HashSet;
+
+import static com.vflores.pos.shared.application.AuthenticatedUserSupport.getCurrentUserId;
+import static com.vflores.pos.shared.application.InventoryAdjustmentSupport.aggregateQuantities;
+import static com.vflores.pos.shared.application.InventoryAdjustmentSupport.applyStockDelta;
+import static com.vflores.pos.shared.application.InventoryAdjustmentSupport.restoreStockFromDetails;
+import static com.vflores.pos.shared.application.PaymentValidationSupport.requirePositiveAmount;
+import static com.vflores.pos.shared.application.PaymentValidationSupport.requireValidPeriod;
 
 @Service
 @RequiredArgsConstructor
@@ -102,7 +107,8 @@ public class RouteSaleService {
         }
 
         validateDriver(request.driverId());
-        restoreStockFromDetails(routeSale.getDetails());
+        restoreStockFromDetails(
+                routeSale.getDetails(), RouteSaleDetail::getProduct, RouteSaleDetail::getQuantity);
         SaleComputation computation = computeRouteSale(request.clientId(), request.items());
 
         routeSale.setUserId(getCurrentUserId());
@@ -125,7 +131,8 @@ public class RouteSaleService {
         RouteSale routeSale = routeSaleRepository.findByIdWithDetails(routeSaleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Route sale not found: " + routeSaleId));
 
-        restoreStockFromDetails(routeSale.getDetails());
+        restoreStockFromDetails(
+                routeSale.getDetails(), RouteSaleDetail::getProduct, RouteSaleDetail::getQuantity);
         routeSaleRepository.delete(routeSale);
     }
 
@@ -140,7 +147,7 @@ public class RouteSaleService {
         Set<UUID> legacyMatches = new HashSet<>();
 
         for (CreateRouteSalePaymentRequest request : requestedPayments) {
-            validatePaymentAmount(request.amount());
+            requirePositiveAmount(request.amount());
             if (request.id() != null) {
                 if (!referencedIds.add(request.id())) {
                     throw new ConflictException("Payment cannot be referenced more than once");
@@ -198,9 +205,7 @@ public class RouteSaleService {
 
     @Transactional(readOnly = true)
     public List<RouteSalePaymentMovementResponse> findPaymentMovements(OffsetDateTime from, OffsetDateTime to) {
-        if (from.isAfter(to)) {
-            throw new ConflictException("Payment period start must not be after its end");
-        }
+        requireValidPeriod(from, to);
         return routeSalePaymentRepository
                 .findByCreatedAtGreaterThanEqualAndCreatedAtLessThanEqualOrderByCreatedAtAsc(from, to)
                 .stream()
@@ -214,12 +219,6 @@ public class RouteSaleService {
                         payment.getAmount(),
                         payment.getCreatedAt()))
                 .toList();
-    }
-
-    private void validatePaymentAmount(BigDecimal amount) {
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new ConflictException("Payment amount must be greater than 0");
-        }
     }
 
     @Transactional(readOnly = true)
@@ -248,7 +247,8 @@ public class RouteSaleService {
                 ? ProductPriceType.WHOLESALE
                 : ProductPriceType.DETAIL;
 
-Map<UUID, BigDecimal> requestedQuantities = aggregateRequestedQuantities(items);        Set<UUID> productIds = requestedQuantities.keySet();
+Map<UUID, BigDecimal> requestedQuantities = aggregateQuantities(
+                items, RouteSaleItemRequest::productId, RouteSaleItemRequest::quantity);        Set<UUID> productIds = requestedQuantities.keySet();
 
         Map<UUID, Product> productsById = productRepository.findAllById(productIds)
                 .stream()
@@ -275,36 +275,6 @@ total = total.add(subtotal);
 
         return new SaleComputation(requestedQuantities, productsById, lines, total);
     }
-
-    private Map<UUID, BigDecimal> aggregateRequestedQuantities(List<RouteSaleItemRequest> items) {
-    Map<UUID, BigDecimal> requestedQuantities = new LinkedHashMap<>();
-    for (RouteSaleItemRequest item : items) {
-        requestedQuantities.merge(item.productId(), item.quantity(), BigDecimal::add);
-    }
-    return requestedQuantities;
-}
-
-    private void applyStockDelta(Map<UUID, BigDecimal> quantities, Map<UUID, Product> productsById, int multiplier) {
-    for (Map.Entry<UUID, BigDecimal> entry : quantities.entrySet()) {
-        Product product = productsById.get(entry.getKey());
-        BigDecimal delta = entry.getValue().multiply(BigDecimal.valueOf(multiplier));
-        int newStock = product.getStock() + delta.intValue();
-        product.setStock(newStock);
-    }
-}
-
-    private void restoreStockFromDetails(List<RouteSaleDetail> details) {
-    Map<UUID, BigDecimal> soldQuantities = new LinkedHashMap<>();
-    Map<UUID, Product> productsById = new LinkedHashMap<>();
-
-    for (RouteSaleDetail detail : details) {
-        UUID productId = detail.getProduct().getId();
-        soldQuantities.merge(productId, detail.getQuantity(), BigDecimal::add);
-        productsById.put(productId, detail.getProduct());
-    }
-
-    applyStockDelta(soldQuantities, productsById, 1);
-}
 
     private List<RouteSaleDetail> buildDetails(RouteSale routeSale, List<SaleLineData> lines) {
     List<RouteSaleDetail> details = new ArrayList<>();
@@ -359,13 +329,6 @@ total = total.add(subtotal);
                 details,
                 payments
         );
-    }
-
-    private UUID getCurrentUserId() {
-        var authentication = org.springframework.security.core.context.SecurityContextHolder
-                .getContext().getAuthentication();
-        var principal = (AuthenticatedUser) authentication.getPrincipal();
-        return principal.getId();
     }
 
     private void validateDriver(UUID driverId) {

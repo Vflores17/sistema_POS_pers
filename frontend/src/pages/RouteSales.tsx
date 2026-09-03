@@ -1,23 +1,22 @@
 import type { ChangeEvent, ReactElement } from "react";
 import { useEffect, useMemo, useState, useRef } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { listClients, type Client } from "../api/clients";
+import { useNavigate, useParams, useLocation } from "react-router-dom";import { listClients, type Client } from "../api/clients";
 import {
-  changeSaleStatus,
-  createSale,
-  deleteSale,
-  getNextInvoiceNumber,
-  getSaleById,
-  listSales,
-  listSalePaymentMovements,
-  updateSale,
-  type PaymentMethod,
-  type Sale,
-  type SaleStatus,
-  type SalePaymentMovement,
-  savePayments,
-} from "../api/sales";
-import styles from "./Sales.module.css";
+  createRouteSale,
+  changeRouteSaleStatus,
+  deleteRouteSale,
+  getNextRouteSaleInvoiceNumber,
+  getRouteSaleById,
+  listRouteSales,
+  listRouteSalePaymentMovements,
+  updateRouteSale,
+  type RoutePaymentMethod as PaymentMethod,
+  type RouteSale as Sale,
+  type RouteSaleStatus as SaleStatus,
+  type RouteSalePaymentMovement,
+  saveRouteSalePayments as savePayments,
+} from "../api/route-sales";
+import styles from "./RouteSales.module.css";
 import Modal from "../components/Modal";
 import {
   listProducts,
@@ -28,22 +27,27 @@ import {
 } from "../api/products";
 import TicketPrint from "../components/TicketPrint";
 import CierreCajaPrint from "../components/CierreCajaPrint";
+import {
+  createDriver,
+  deleteDriver,
+  listDrivers,
+  updateDriver,
+  type Driver,
+  type DriverStatus,
+} from "../api/drivers";
 import { usePermissions } from "../auth/PermissionContext";
 import { isAdminAuthorizationCancelled } from "../api/admin-authorizations";
 import { isGloballyReportedError, notifyGlobalError } from "../api/errors";
-import SkeletonBlock from "../components/SkeletonBlock";
+import ModuleLoadingSkeleton from "../components/ModuleLoadingSkeleton";
 import SaleHistoryFilters from "../components/SaleHistoryFilters";
 import SaleHistoryTable from "../components/SaleHistoryTable";
-import SalesHistoryActions from "../components/SalesHistoryActions";
+import RouteSalesHistoryActions from "../components/RouteSalesHistoryActions";
 import { SaleFormHeader, SaleInvoiceField } from "../components/SaleFormPresentation";
 import { useSaleHistoryFilters } from "../hooks/useSaleHistoryFilters";
-import { useSaleKeyboardShortcuts } from "../hooks/useSaleKeyboardShortcuts";
+import { useEscapeShortcut, useSaleKeyboardShortcuts } from "../hooks/useSaleKeyboardShortcuts";
 import { useSalePayments } from "../hooks/useSalePayments";
-import { useSalesCashRegister } from "../hooks/useCashRegister";
-import {
-  generateCashClosureExcel,
-  generateSaleWhatsappPdf,
-} from "../utils/saleExportUtils";
+import { useRouteCashRegister } from "../hooks/useCashRegister";
+import { generateRouteSaleWhatsappPdf } from "../utils/saleExportUtils";
 import {
   calculateLinesTotal,
   filterClientsByName,
@@ -79,6 +83,7 @@ interface ModalState {
 
 interface SaleFormDraft {
   clientId: string;
+  driverId: string;
   paymentMethod: PaymentMethod;
   lines: LineDraft[];
   comments: string;
@@ -87,6 +92,7 @@ interface SaleFormDraft {
 
 const EMPTY_FORM: SaleFormDraft = {
   clientId: "",
+  driverId: "",
   paymentMethod: "CASH",
   lines: [
     { id: crypto.randomUUID(), productId: "", quantity: 1, unitPrice: "" },
@@ -94,27 +100,26 @@ const EMPTY_FORM: SaleFormDraft = {
   comments: "",
 };
 
-export default function Sales(): ReactElement {
+export default function RouteSales(): ReactElement {
   const { hasPermission, hasAllPermissions } = usePermissions();
-  const canCreate = hasPermission("SALE_CREATE");
-  const canUpdate = hasPermission("SALE_UPDATE");
-  const canDelete = hasPermission("SALE_DELETE");
-  const canCancel = hasPermission("SALE_CANCEL");
+  const canCreate = hasPermission("ROUTE_CREATE");
+  const canUpdate = hasPermission("ROUTE_UPDATE");
+  const canDelete = hasPermission("ROUTE_DELETE");
+  const canCancel = hasPermission("ROUTE_CANCEL");
   const canReadProducts = hasPermission("PRODUCT_READ");
   const canReadPrices = hasPermission("PRICE_READ");
   const canCreateProduct = hasAllPermissions("PRODUCT_CREATE", "PRICE_CREATE");
+  const canReadDrivers = hasPermission("DRIVER_READ");
+  const canCreateDriver = hasPermission("DRIVER_CREATE");
+  const canDeleteDriver = hasPermission("DRIVER_DELETE");
   const canOperateCaja = canCreate || canUpdate;
   const [showModificarModal, setShowModificarModal] = useState<boolean>(false);
-  const [modificarInvoiceInput, setModificarInvoiceInput] =
-    useState<string>("");
+const [modificarInvoiceInput, setModificarInvoiceInput] = useState<string>("");
   const {
     cashRegister: caja,
-    persistCashRegister: persistCaja,
     openCashRegister,
     closeCashRegister,
-    addExpense,
-    removeExpense,
-  } = useSalesCashRegister();
+  } = useRouteCashRegister();
   const [showAbrirCajaModal, setShowAbrirCajaModal] = useState<boolean>(false);
   const [montoInicialDraft, setMontoInicialDraft] = useState<string>("30000");
   const [modal, setModal] = useState<ModalState>({
@@ -128,8 +133,9 @@ export default function Sales(): ReactElement {
   const navigate = useNavigate();
   const location = useLocation();
   const { id } = useParams<{ id: string }>();
-  const isNewScreen = window.location.pathname === "/sales/new";
+  const isNewScreen = window.location.pathname === "/route-sales/new";
   const isEditScreen = window.location.pathname.endsWith("/edit");
+
   const isViewScreen = window.location.pathname.endsWith("/view");
   const isFormScreen = isNewScreen || isEditScreen || isViewScreen;
 
@@ -138,6 +144,11 @@ export default function Sales(): ReactElement {
 
   const [sales, setSales] = useState<Sale[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [showDriversModal, setShowDriversModal] = useState<boolean>(false);
+  const [driverNameDraft, setDriverNameDraft] = useState<string>("");
+  const [driverStatusDraft, setDriverStatusDraft] =
+    useState<DriverStatus>("ACTIVE");
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
@@ -179,19 +190,6 @@ export default function Sales(): ReactElement {
     { type: string; price: number }[]
   >([]);
   const [saleToPrint, setSaleToPrint] = useState<Sale | null>(null);
-
-  const [showGastosModal, setShowGastosModal] = useState<boolean>(false);
-  const [gastoDraft, setGastoDraft] = useState<{
-    descripcion: string;
-    monto: string;
-  }>({ descripcion: "", monto: "" });
-  const [whatsappModal, setWhatsappModal] = useState<{
-    show: boolean;
-    sale: Sale | null;
-    mensaje: string;
-    telefono: string;
-  } | null>(null);
-
   const [cierreToPrint, setCierreToPrint] = useState<{
     horaInicio: string;
     horaCierre: string;
@@ -208,9 +206,15 @@ export default function Sales(): ReactElement {
     gastos: { descripcion: string; monto: number }[];
   } | null>(null);
 
-  const [showComments, setShowComments] = useState<boolean>(false);
 
-  const clientsById = useMemo(() => {
+  
+
+  const [dropdownPosition, setDropdownPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+
+   const clientsById = useMemo(() => {
     return new Map(clients.map((client) => [client.id, client]));
   }, [clients]);
 
@@ -226,29 +230,29 @@ export default function Sales(): ReactElement {
     }, 300);
   }
 
+
   function onAbrirModificar(): void {
-    const selected = sortedAndFilteredSales.find((s) => s.id === selectedRowId);
-    setModificarInvoiceInput(selected ? String(selected.invoiceNumber) : "");
-    setShowModificarModal(true);
-  }
 
-  async function onConfirmarModificar(): Promise<void> {
-    const numero = Number(modificarInvoiceInput);
-    if (!numero) {
-      setError("Ingresá un número de factura válido.");
-      return;
-    }
-    const sale =
-      sortedAndFilteredSales.find((s) => s.invoiceNumber === numero) ??
-      sales.find((s) => s.invoiceNumber === numero);
-    if (!sale) {
-      setError(`No se encontró la factura número ${numero}.`);
-      return;
-    }
-    setShowModificarModal(false);
-    navigate(`/sales/${sale.id}/edit`, { state: { selectedId: sale.id } });
-  }
+    const selected = sortedAndFilteredSales.find(s => s.id === selectedRowId);
+  setModificarInvoiceInput(selected ? String(selected.invoiceNumber) : "");
+  setShowModificarModal(true);
+}
 
+async function onConfirmarModificar(): Promise<void> {
+  const numero = Number(modificarInvoiceInput);
+  if (!numero) {
+    setError("Ingresá un número de factura válido.");
+    return;
+  }
+  const sale = sortedAndFilteredSales.find(s => s.invoiceNumber === numero)
+    ?? sales.find(s => s.invoiceNumber === numero);
+  if (!sale) {
+    setError(`No se encontró la ruta número ${numero}.`);
+    return;
+  }
+  setShowModificarModal(false);
+  navigate(`/route-sales/${sale.id}/edit`, { state: { selectedId: sale.id } });
+}
   function abrirCaja(): void {
     if (!montoInicialDraft) {
       setModal({
@@ -266,6 +270,15 @@ export default function Sales(): ReactElement {
     setShowAbrirCajaModal(false);
   }
 
+  const [whatsappModal, setWhatsappModal] = useState<{
+    show: boolean;
+    sale: Sale | null;
+    mensaje: string;
+    telefono: string;
+  } | null>(null);
+
+  const [showComments, setShowComments] = useState<boolean>(false);
+
   async function cerrarCaja(): Promise<void> {
     const openedAt = caja.openedAt || (() => {
       const legacyDate = new Date(caja.horaInicio);
@@ -282,16 +295,14 @@ export default function Sales(): ReactElement {
       });
       return;
     }
-
     const closedAt = new Date();
-    let movements: SalePaymentMovement[];
+    let movements: RouteSalePaymentMovement[];
     try {
-      movements = await listSalePaymentMovements(openedAt, closedAt.toISOString());
+      movements = await listRouteSalePaymentMovements(openedAt, closedAt.toISOString());
     } catch (cause) {
-      if (!isGloballyReportedError(cause)) notifyGlobalError(readError(cause, "No se pudieron consultar los pagos del turno."));
+      if (!isGloballyReportedError(cause)) notifyGlobalError(readError(cause, "No se pudieron consultar los pagos del turno de rutas."));
       return;
     }
-
     const fromTime = new Date(openedAt).getTime();
     const toTime = closedAt.getTime();
     const facturasDeTurno = sales.filter((sale) => {
@@ -305,12 +316,9 @@ export default function Sales(): ReactElement {
     const totalSinpe = totalByMethod("SINPE");
     const totalTransferencia = totalByMethod("TRANSFER");
     const totalTarjeta = totalByMethod("CARD");
-    const totalGastos = caja.gastos.reduce((sum, gasto) => sum + gasto.monto, 0);
-    const efectivoNeto = totalEfectivo - totalGastos;
     const abonosAnteriores = movements.filter(
-      (payment) => new Date(payment.saleCreatedAt).getTime() < fromTime,
+      (payment) => new Date(payment.routeSaleCreatedAt).getTime() < fromTime,
     ).length;
-
     const mensaje = `
 🕐 Inicio: ${caja.horaInicio}
 💵 Monto inicial: ₡${caja.montoInicial.toLocaleString("es-CR")}
@@ -323,11 +331,8 @@ export default function Sales(): ReactElement {
 🏦 Transferencia: ₡${totalTransferencia.toLocaleString("es-CR")}
 💳 Tarjeta: ₡${totalTarjeta.toLocaleString("es-CR")}
 
-🧾 Gastos: ₡${totalGastos.toLocaleString("es-CR")}
-💵 Efectivo neto: ₡${efectivoNeto.toLocaleString("es-CR")}
-
 ⚠️ Recuerde vaciar la memoria del datáfono.
-`.trim();
+  `.trim();
 
     setModal({
       show: true,
@@ -338,15 +343,7 @@ export default function Sales(): ReactElement {
       cancelLabel: "Cancelar",
       onConfirm: () => {
         closeModal();
-        generateCashClosureExcel(
-          movements,
-          fromTime,
-          toTime,
-          clientsById,
-          caja.gastos,
-        );
         setSaleToPrint(null);
-
         setCierreToPrint({
           horaInicio: caja.horaInicio,
           horaCierre: closedAt.toLocaleString("es-CR"),
@@ -357,13 +354,12 @@ export default function Sales(): ReactElement {
           totalSinpe,
           totalTransferencia,
           totalTarjeta,
-          totalGastos,
-          efectivoNeto,
+          totalGastos: 0,
+          efectivoNeto: totalEfectivo,
           total: totalEfectivo + totalSinpe + totalTransferencia + totalTarjeta,
-          gastos: caja.gastos,
+          gastos: [],
         });
-
-        setTimeout(() => {
+        window.setTimeout(() => {
           window.print();
           setCierreToPrint(null);
           closeCashRegister();
@@ -433,13 +429,16 @@ export default function Sales(): ReactElement {
             cancelLabel: "Cancelar",
             onConfirm: () => {
               closeModal();
-              navigate("/sales", { state: { selectedId: id } });
+              navigate("/route-sales", { state: { selectedId: id } });
             },
             onCancel: closeModal,
           });
         } else {
-          navigate("/sales", { state: { selectedId: id } });
+          navigate("/route-sales", { state: { selectedId: id } });
         }
+      },
+      onOpenModify: () => {
+        if (caja.abierta) onAbrirModificar();
       },
       onSelectRow: setSelectedRowId,
       onFocusCell: focusCell,
@@ -474,25 +473,20 @@ export default function Sales(): ReactElement {
       canOpenModify: caja.abierta,
       canView: caja.abierta && Boolean(selectedRowId),
       canPrint: caja.abierta && Boolean(selectedRowId),
-      canDelete: () =>
-        canDelete &&
-        caja.abierta &&
-        Boolean(selectedRowId) &&
-        selectedSale?.status !== "PAID" &&
-        selectedSale?.status !== "PARTIAL",
+      canDelete: () => canDelete && caja.abierta && Boolean(selectedRowId),
       canPay: () =>
         canUpdate &&
         caja.abierta &&
         Boolean(selectedRowId) &&
-        (selectedSale?.status === "PENDING" || selectedSale?.status === "PARTIAL"),
+        selectedSale?.status === "PENDING",
       canOpenCashRegister: canOperateCaja && !caja.abierta,
       canCloseCashRegister: canOperateCaja && caja.abierta,
-      onCreate: () => navigate("/sales/new"),
+      onCreate: () => navigate("/route-sales/new"),
       onOpenModify: onAbrirModificar,
-      onView: () => navigate(`/sales/${selectedRowId}/edit`),
+      onView: () => navigate(`/route-sales/${selectedRowId}/edit`),
       onPrint: printSale,
       onDelete: () => void onDeleteSale(selectedRowId),
-      onPay: () => navigate(`/sales/${selectedRowId}/edit`),
+      onPay: () => navigate(`/route-sales/${selectedRowId}/edit`),
       onExit: () => navigate("/dashboard"),
       onOpenCashRegister: () => setShowAbrirCajaModal(true),
       onCloseCashRegister: cerrarCaja,
@@ -504,6 +498,7 @@ export default function Sales(): ReactElement {
   useEffect(() => {
     void bootstrap();
   }, [isFormScreen, isEditScreen, id]);
+
 
   useEffect(() => {
     if (!selectedRowRef.current) return;
@@ -537,30 +532,26 @@ export default function Sales(): ReactElement {
   }, [selectedRowId, saleDraft.lines]);
 
   useEffect(() => {
-    if (isFormScreen) return;
-    if (!selectedRowId) return;
+  if (isFormScreen) return;
+  if (!selectedRowId) return;
 
-    const container = document.querySelector(
-      `.${styles.tableContainer}`,
-    ) as HTMLElement;
-    if (!container) return;
+  const container = document.querySelector(`.${styles.tableContainer}`) as HTMLElement;
+  if (!container) return;
 
-    const selectedRow = container.querySelector(
-      `tr.${styles.selected}`,
-    ) as HTMLElement;
-    if (!selectedRow) return;
+  const selectedRow = container.querySelector(`tr.${styles.selected}`) as HTMLElement;
+  if (!selectedRow) return;
 
-    const rowTop = selectedRow.offsetTop;
-    const rowBottom = rowTop + selectedRow.offsetHeight;
-    const containerTop = container.scrollTop;
-    const containerBottom = container.scrollTop + container.clientHeight;
+  const rowTop = selectedRow.offsetTop;
+  const rowBottom = rowTop + selectedRow.offsetHeight;
+  const containerTop = container.scrollTop;
+  const containerBottom = container.scrollTop + container.clientHeight;
 
-    if (rowTop < containerTop) {
-      container.scrollTop = rowTop;
-    } else if (rowBottom > containerBottom) {
-      container.scrollTop = rowBottom - container.clientHeight;
-    }
-  }, [selectedRowId, isFormScreen]);
+  if (rowTop < containerTop) {
+    container.scrollTop = rowTop;
+  } else if (rowBottom > containerBottom) {
+    container.scrollTop = rowBottom - container.clientHeight;
+  }
+}, [selectedRowId, isFormScreen]);
 
   const sessionUserLabel = useMemo(() => getSessionUserLabel(), []);
 
@@ -574,10 +565,14 @@ export default function Sales(): ReactElement {
     activeElement === "select" ||
     activeElement === "textarea";
 
+ 
+
   const filteredClientOptions = useMemo(
     () => filterClientsByName(clients, clientSearch),
     [clients, clientSearch],
   );
+
+  
 
   const calculatedTotal = useMemo(
     () => calculateLinesTotal(saleDraft.lines, productsById),
@@ -603,10 +598,46 @@ export default function Sales(): ReactElement {
   ): Promise<string> {
     return resolveConfiguredUnitPrice(productId, clientId, clientsById);
   }
-  const [dropdownPosition, setDropdownPosition] = useState<{
-    top: number;
-    left: number;
-  } | null>(null);
+  
+  function enviarWhatsApp(sale: Sale): void {
+    const client = clientsById.get(sale.clientId);
+    const phone = client?.phone ?? "";
+    const mensajePredeterminado = `Hola buenas tardes.!! Adjuntamos la factura que se te entregará el dia de mañana. =)`;
+
+    setWhatsappModal({
+      show: true,
+      sale,
+      mensaje: mensajePredeterminado,
+      telefono: phone,
+    });
+  }
+
+  function confirmarEnvioWhatsApp(): void {
+    if (!whatsappModal?.sale) return;
+    const sale = whatsappModal.sale;
+    const client = clientsById.get(sale.clientId);
+
+    if (!whatsappModal.telefono.trim()) {
+      setModal({
+        show: true,
+        type: "error",
+        title: "Error",
+        message: "El número de teléfono es obligatorio.",
+        confirmLabel: "Aceptar",
+        onConfirm: closeModal,
+      });
+      return;
+    }
+
+    setWhatsappModal(null);
+    generateRouteSaleWhatsappPdf({
+      sale,
+      client,
+      productsById,
+      phone: whatsappModal.telefono,
+      message: whatsappModal.mensaje,
+    });
+  }
 
   interface ProductDraft {
     name: string;
@@ -619,6 +650,57 @@ export default function Sales(): ReactElement {
 
   function closeModal(): void {
     setModal((prev) => ({ ...prev, show: false }));
+  }
+
+  useEscapeShortcut(showDriversModal, () => setShowDriversModal(false));
+
+  async function refreshDrivers(): Promise<void> {
+    const data = await listDrivers();
+    setDrivers(data);
+  }
+
+  async function onCreateDriver(): Promise<void> {
+    if (!canCreateDriver) return;
+    if (!driverNameDraft.trim()) {
+      setError("El nombre del chofer es requerido.");
+      return;
+    }
+    try {
+      await createDriver({
+        name: driverNameDraft.trim(),
+        status: driverStatusDraft,
+      });
+      setDriverNameDraft("");
+      setDriverStatusDraft("ACTIVE");
+      await refreshDrivers();
+    } catch (err) {
+      setError(readError(err, "No se pudo crear el chofer."));
+    }
+  }
+
+  async function onToggleDriverStatus(driver: Driver): Promise<void> {
+    const nextStatus: DriverStatus =
+      driver.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    try {
+      await updateDriver(driver.id, { name: driver.name, status: nextStatus });
+      await refreshDrivers();
+    } catch (err) {
+      if (isAdminAuthorizationCancelled(err)) return;
+      setError(readError(err, "No se pudo actualizar el chofer."));
+    }
+  }
+
+  async function onDeleteDriver(driver: Driver): Promise<void> {
+    if (!canDeleteDriver) return;
+    try {
+      await deleteDriver(driver.id);
+      await refreshDrivers();
+      if (saleDraft.driverId === driver.id) {
+        setSaleDraft((prev) => ({ ...prev, driverId: "" }));
+      }
+    } catch (err) {
+      setError(readError(err, "No se pudo eliminar el chofer."));
+    }
   }
 
   function hasUnsavedChanges(): boolean {
@@ -634,15 +716,18 @@ export default function Sales(): ReactElement {
       const baseData = await Promise.all([
         hasPermission("CLIENT_READ") ? listClients() : Promise.resolve([]),
         canReadProducts ? listProducts() : Promise.resolve([]),
+        canReadDrivers ? listDrivers() : Promise.resolve([]),
       ]);
       setClients(baseData[0]);
       setProducts(baseData[1]);
+      setDrivers(baseData[2]);
       if (isFormScreen) {
         if ((isEditScreen || isViewScreen) && id) {
-          const sale = await getSaleById(id);
+          const sale = await getRouteSaleById(id);
           setInvoiceNumber(sale.invoiceNumber);
           setSaleDraft({
             clientId: sale.clientId,
+            driverId: sale.driverId,
             paymentMethod: sale.paymentMethod,
             lines: sale.details.map((detail) => ({
               id: detail.id ?? crypto.randomUUID(),
@@ -653,16 +738,13 @@ export default function Sales(): ReactElement {
             comments: sale.comments ?? "",
             status: sale.status,
           });
-          if (sale.comments) {
-            setShowComments(true);
-          }
           const clientName =
             baseData[0].find((c) => c.id === sale.clientId)?.name ?? "";
           setClientSearch(clientName);
 
           loadPayments(sale.payments ?? []);
         } else {
-          const next = await getNextInvoiceNumber();
+          const next = await getNextRouteSaleInvoiceNumber();
           setInvoiceNumber(next);
           setSaleDraft(EMPTY_FORM);
           setClientSearch("");
@@ -673,28 +755,23 @@ export default function Sales(): ReactElement {
           resetPayments();
         }
       } else {
-        const salesData = await listSales();
-        setSales(salesData);
+  const salesData = await listRouteSales();
+  setSales(salesData);
 
-        const state = location.state as { selectedId?: string } | null;
-        if (state?.selectedId) {
-          setSelectedRowId(state.selectedId);
-          setTimeout(() => {
-            const container = document.querySelector(
-              `.${styles.tableContainer}`,
-            ) as HTMLElement;
-            const selectedRow = container?.querySelector(
-              `tr.${styles.selected}`,
-            ) as HTMLElement;
-            if (container && selectedRow) {
-              container.scrollTop =
-                selectedRow.offsetTop - container.clientHeight / 2;
-            }
-          }, 100);
-        }
+  const state = location.state as { selectedId?: string } | null;
+  if (state?.selectedId) {
+    setSelectedRowId(state.selectedId);
+    setTimeout(() => {
+      const container = document.querySelector(`.${styles.tableContainer}`) as HTMLElement;
+      const selectedRow = container?.querySelector(`tr.${styles.selected}`) as HTMLElement;
+      if (container && selectedRow) {
+        container.scrollTop = selectedRow.offsetTop - container.clientHeight / 2;
       }
+    }, 100);
+  }
+}
     } catch (err) {
-      setError(readError(err, "No se pudo cargar la información de ventas."));
+      setError(readError(err, "No se pudo cargar la información de rutas."));
     } finally {
       setLoading(false);
     }
@@ -785,14 +862,7 @@ export default function Sales(): ReactElement {
 
   async function addProductFromModal(productId: string): Promise<void> {
     if (!saleDraft.clientId) {
-      setModal({
-        show: true,
-        type: "error",
-        title: "Error",
-        message: "Selecciona un cliente.",
-        confirmLabel: "Aceptar",
-        onConfirm: closeModal,
-      });
+      setError("Selecciona un cliente primero.");
       return;
     }
 
@@ -839,6 +909,17 @@ export default function Sales(): ReactElement {
       });
       return;
     }
+    if (!saleDraft.driverId) {
+      setModal({
+        show: true,
+        type: "error",
+        title: "Error",
+        message: "Selecciona un chofer.",
+        confirmLabel: "Aceptar",
+        onConfirm: closeModal,
+      });
+      return;
+    }
 
     const cleanedLines = saleDraft.lines
       .filter((line) => line.productId.trim().length > 0)
@@ -874,12 +955,11 @@ export default function Sales(): ReactElement {
 
     const paid = paymentsPayload.reduce((sum, p) => sum + p.amount, 0);
     if (saleDraft.status === "CANCELLED" && !canCancel) {
-      setError("No tienes permiso para cancelar ventas.");
+      setError("No tienes permiso para cancelar rutas.");
       return;
     }
-    const totalToCompare = calculatedTotal;
 
-    if (paid > totalToCompare) {
+    if (paid > calculatedTotal) {
       setModal({
         show: true,
         type: "error",
@@ -890,70 +970,36 @@ export default function Sales(): ReactElement {
       });
       return;
     }
+
     setSaving(true);
     try {
       const payload = {
         clientId: saleDraft.clientId,
+        driverId: saleDraft.driverId,
         paymentMethod: saleDraft.paymentMethod,
         items: cleanedLines.map((line) => ({
           productId: line.productId,
           quantity: line.quantity,
           price: line.unitPrice !== "" ? Number(line.unitPrice) : undefined,
         })),
-        status: calculatedStatus,
         comments: saleDraft.comments,
+        status: calculatedStatus,
       };
+
       const saved =
         isEditScreen && id
-          ? await updateSale(id, payload)
-          : await createSale(payload);
-      if (caja.abierta) {
-        const yaExiste = caja.facturaIds.includes(saved.id);
-        const tienePagos = paymentsPayload.length > 0;
+          ? await updateRouteSale(id, payload)
+          : await createRouteSale(payload);
 
-        if (!isEditScreen && !yaExiste) {
-          // Factura nueva — agregar a la caja
-          const nuevosPagos = paymentsPayload.map((p) => ({
-            facturaId: saved.id,
-            method: p.method as string,
-            amount: p.amount,
-          }));
-          const updatedCaja = {
-            ...caja,
-            facturaIds: [...caja.facturaIds, saved.id],
-            pagos: [...caja.pagos, ...nuevosPagos],
-          };
-          persistCaja(updatedCaja);
-        } else if (isEditScreen && canUpdate && yaExiste && tienePagos) {
-          // Factura editada que YA estaba en la caja — actualizar pagos
-          const nuevosPagos = paymentsPayload.map((p) => ({
-            facturaId: saved.id,
-            method: p.method as string,
-            amount: p.amount,
-          }));
-          const pagosSinEstaFactura = caja.pagos.filter(
-            (p) => p.facturaId !== saved.id,
-          );
-          const updatedCaja = {
-            ...caja,
-            pagos: [...pagosSinEstaFactura, ...nuevosPagos],
-          };
-          persistCaja(updatedCaja);
-        }
-      }
       if (canUpdate && paymentsPayload.length > 0) {
         await savePayments(saved.id, paymentsPayload);
       }
-      if (!isEditScreen && saleDraft.status && saleDraft.status !== "PENDING") {
-        await changeSaleStatus(saved.id, saleDraft.status);
-      }
 
       if (printAfterSave) {
-        const saleToprint = await getSaleById(saved.id);
-        printSale(saleToprint);
+        printSale(saved);
       }
-      // Resetear formulario para nueva factura
-      const next = await getNextInvoiceNumber();
+
+      const next = await getNextRouteSaleInvoiceNumber();
       setInvoiceNumber(next);
       setSaleDraft(EMPTY_FORM);
       setClientSearch("");
@@ -962,16 +1008,13 @@ export default function Sales(): ReactElement {
       resetPayments();
 
       setModal({
-        show: true,
-        type: "success",
-        title: isEditScreen ? "Factura modificada" : "Factura creada",
-        message: isEditScreen
-          ? "La factura fue modificada correctamente."
-          : "La factura fue creada correctamente.",
-        onConfirm: () => {
+  show: true,
+  type: "success",
+  title: `Factura número: ${String(saved.invoiceNumber)}`,
+  message: `La factura fue creada correctamente.`,
+  onConfirm: () => {
           closeModal();
-          if (isEditScreen)
-            navigate("/sales", { state: { selectedId: saved.id } });
+          if (isEditScreen) navigate("/route-sales", { state: { selectedId: id } });;
         },
         confirmLabel: "Aceptar",
       });
@@ -982,7 +1025,7 @@ export default function Sales(): ReactElement {
         show: true,
         type: "error",
         title: "Error",
-        message: readError(err, "No se pudo guardar la venta."),
+        message: readError(err, "No se pudo guardar la ruta."),
         confirmLabel: "Aceptar",
         onConfirm: closeModal,
       });
@@ -997,15 +1040,15 @@ export default function Sales(): ReactElement {
       show: true,
       type: "confirm",
       danger: true,
-      title: "Eliminar factura",
+      title: "Eliminar ruta",
       message:
-        "¿Estás seguro que deseas eliminar esta factura? Esta acción no se puede deshacer.",
+        "¿Estás seguro que deseas eliminar esta ruta? Esta acción no se puede deshacer.",
       confirmLabel: "Eliminar",
       cancelLabel: "Cancelar",
       onConfirm: async () => {
         closeModal();
         try {
-          await deleteSale(saleId);
+          await deleteRouteSale(saleId);
           setSales((prev) => prev.filter((sale) => sale.id !== saleId));
         } catch (err) {
           setError(readError(err, "No se pudo eliminar la venta."));
@@ -1016,22 +1059,22 @@ export default function Sales(): ReactElement {
   }
 
   function onCancelSale(saleId: string): void {
+    if (!canCancel) return;
     setModal({
       show: true,
       type: "confirm",
       danger: true,
-      title: "Cancelar factura",
-      message: "La factura quedará cancelada.",
-      confirmLabel: "Cancelar factura",
+      title: "Cancelar ruta",
+      message: "La factura de ruta quedará cancelada.",
+      confirmLabel: "Cancelar ruta",
       cancelLabel: "Volver",
       onConfirm: () => void (async () => {
         closeModal();
         try {
-          const updated = await changeSaleStatus(saleId, "CANCELLED");
+          const updated = await changeRouteSaleStatus(saleId, "CANCELLED");
           setSales((current) => current.map((sale) => sale.id === saleId ? updated : sale));
         } catch (caught) {
-          if (isAdminAuthorizationCancelled(caught)) return;
-          setError(readError(caught, "No se pudo cancelar la venta."));
+          setError(readError(caught, "No se pudo cancelar la ruta."));
         }
       })(),
       onCancel: closeModal,
@@ -1039,42 +1082,7 @@ export default function Sales(): ReactElement {
   }
 
   if (loading) {
-    return (
-      <div className={styles.skeletonPage} aria-label="Cargando ventas" aria-busy="true">
-        <section className={styles.container}>
-          <header className={styles.header}>
-            <SkeletonBlock className={styles.skeletonHeading} />
-            <SkeletonBlock className={styles.skeletonDate} />
-          </header>
-          <div className={styles.skeletonFilters}>
-            {Array.from({ length: 5 }, (_, index) => (
-              <div className={styles.skeletonField} key={index}>
-                <SkeletonBlock className={styles.skeletonFieldLabel} />
-                <SkeletonBlock className={styles.skeletonControl} />
-              </div>
-            ))}
-            <SkeletonBlock className={styles.skeletonButton} />
-            <SkeletonBlock className={styles.skeletonButton} />
-          </div>
-          <div className={styles.skeletonTableWrap}>
-            <div className={styles.skeletonTableHeader}>
-              {Array.from({ length: 6 }, (_, index) => <SkeletonBlock key={index} />)}
-            </div>
-            {Array.from({ length: 8 }, (_, row) => (
-              <div className={styles.skeletonTableRow} key={row}>
-                {Array.from({ length: 6 }, (_, column) => (
-                  <SkeletonBlock key={column} style={{ width: column === 2 ? "78%" : "62%" }} />
-                ))}
-              </div>
-            ))}
-          </div>
-          <div className={styles.skeletonBottomBar}>
-            <div>{Array.from({ length: 6 }, (_, index) => <SkeletonBlock key={index} />)}</div>
-            <div>{Array.from({ length: 3 }, (_, index) => <SkeletonBlock key={index} />)}</div>
-          </div>
-        </section>
-      </div>
-    );
+    return <ModuleLoadingSkeleton columns={7} variant="history" rows={8} />;
   }
 
   if (isFormScreen) {
@@ -1095,10 +1103,10 @@ export default function Sales(): ReactElement {
         <section className={styles.container}>
           <SaleFormHeader
             title={isEditScreen
-              ? "Modificar Venta"
+              ? "Modificar Ruta"
               : isViewScreen
-                ? "Visualización de Factura"
-                : "Nueva Venta"}
+                ? "Visualización de Factura de Ruta"
+                : "Nueva Factura Ruta"}
             error={error}
             styles={styles}
           />
@@ -1106,7 +1114,12 @@ export default function Sales(): ReactElement {
           <div className={styles.card}>
             {" "}
             <div className={styles.topGrid}>
-              <SaleInvoiceField invoiceNumber={invoiceNumber || "—"} styles={styles} />
+              <SaleInvoiceField
+                invoiceNumber={invoiceNumber
+                  ? `R-${String(invoiceNumber).padStart(3, "0")}`
+                  : "—"}
+                styles={styles}
+              />
               <div className={styles.field}>
                 <label>
                   <u>B</u>uscar cliente
@@ -1137,15 +1150,6 @@ export default function Sales(): ReactElement {
                         setClientDropdownIndex((prev) =>
                           Math.min(prev + 1, options.length - 1),
                         );
-                        setTimeout(() => {
-                          const dropdown = document.querySelector(
-                            `.${styles.clientDropdown}`,
-                          );
-                          const selected = dropdown?.querySelector(
-                            `[data-index="${clientDropdownIndex + 1}"]`,
-                          ) as HTMLElement;
-                          selected?.scrollIntoView({ block: "nearest" });
-                        }, 0);
                       }
                       if (e.key === "ArrowUp") {
                         e.preventDefault();
@@ -1171,96 +1175,109 @@ export default function Sales(): ReactElement {
                     autoComplete="off"
                   />
                   {showClientDropdown && (
-                    <div
-                      className={styles.clientDropdown}
-                      style={{ maxHeight: "200px", overflowY: "auto" }}
-                    >
-                      {filteredClientOptions.map((client, index) => (
-                        <div
-                          key={client.id}
-                          data-index={index}
-                          className={styles.clientOption}
-                          style={
-                            index === clientDropdownIndex
-                              ? { background: "#d1fae5", color: "#16a34a" }
-                              : {}
-                          }
-                          onMouseDown={() => {
-                            setSaleDraft((prev) => ({
-                              ...prev,
-                              clientId: client.id,
-                            }));
-                            setClientSearch(client.name);
-                            setShowClientDropdown(false);
-                            setClientDropdownIndex(-1);
-                          }}
-                          onMouseEnter={() => setClientDropdownIndex(index)}
-                        >
-                          {client.name}
-                        </div>
-                      ))}
+                    <div className={styles.clientDropdown} style={{ maxHeight: "200px", overflowY: "auto" }}>
+                      {filteredClientOptions
+                        .map((client, index) => (
+                          <div
+                            key={client.id}
+                            className={styles.clientOption}
+                            style={
+                              index === clientDropdownIndex
+                                ? { background: "#d1fae5", color: "#16a34a" }
+                                : {}
+                            }
+                            onMouseDown={() => {
+                              setSaleDraft((prev) => ({
+                                ...prev,
+                                clientId: client.id,
+                              }));
+                              setClientSearch(client.name);
+                              setShowClientDropdown(false);
+                              setClientDropdownIndex(-1);
+                            }}
+                            onMouseEnter={() => setClientDropdownIndex(index)}
+                          >
+                            {client.name}
+                          </div>
+                        ))}
                     </div>
                   )}
                 </div>
               </div>
               <div className={styles.field} style={{ gridColumn: "span 2" }}>
-                <label>Método de Pago</label>
+                <label>
+                  Método de <u>P</u>ago
+                </label>
                 <div className={styles.paymentsRow}>
-  {[
-    { key: "CASH" as PaymentMethod, label: "Efectivo" },
-    { key: "SINPE" as PaymentMethod, label: "SINPE" },
-    { key: "TRANSFER" as PaymentMethod, label: "Transferencia" },
-    { key: "CARD" as PaymentMethod, label: "Tarjeta" },
-  ].map((item) => (
-    <div key={item.key} className={styles.paymentItem}>
-      <label style={{ display: "flex", alignItems: "center", gap: "0.3rem", cursor: "pointer" }}>
-        <input
-          type="checkbox"
-          checked={paymentDraft[item.key].enabled}
-          onChange={(event) => onPaymentToggle(item.key, event.target.checked)}
-          disabled={paymentDraft[item.key].amounts.some((entry) => Boolean(entry.id)) || isViewScreen || (isEditScreen && !canUpdate)}
-        />
-        <span style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>{item.label}</span>
-      </label>
-      {paymentDraft[item.key].enabled && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-          {paymentDraft[item.key].amounts.map((entry, index) => (
-            <div key={entry.id ?? index} style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Monto"
-                value={entry.amount}
-                onChange={(e) => onPaymentAmountChange(item.key, index, e.target.value)}
-                disabled={Boolean(entry.id) || isViewScreen || (isEditScreen && !canUpdate)}
-                style={{ width: "90px" }}
-              />
-              {!entry.id && !isViewScreen && (!isEditScreen || canUpdate) && paymentDraft[item.key].amounts.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => onPaymentRemoveAmount(item.key, index)}
-                  style={{ background: "#dc2626", color: "white", border: "none", borderRadius: 4, padding: "0.2rem 0.4rem", cursor: "pointer", fontSize: "0.8rem" }}
+                  {[
+                    { key: "CASH" as PaymentMethod, label: "Efectivo" },
+                    { key: "SINPE" as PaymentMethod, label: "SINPE" },
+                    {
+                      key: "TRANSFER" as PaymentMethod,
+                      label: "Transferencia",
+                    },
+                    { key: "CARD" as PaymentMethod, label: "Tarjeta" },
+                  ].map((item) => (
+                    <div key={item.key} className={styles.paymentItem}>
+                      <input
+                        type="checkbox"
+                        checked={paymentDraft[item.key].enabled}
+                        onChange={(event) =>
+                          onPaymentToggle(item.key, event.target.checked)
+                        }
+                        disabled={paymentDraft[item.key].amounts.some((entry) => Boolean(entry.id)) || !isEditScreen || !canUpdate}
+                      />
+                      <span
+                        style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}
+                      >
+                        {item.label}
+                      </span>
+                      {paymentDraft[item.key].enabled && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                          {paymentDraft[item.key].amounts.map((entry, index) => (
+                            <div key={entry.id ?? index} style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="Monto"
+                                value={entry.amount}
+                                onChange={(e) => onPaymentAmountChange(item.key, index, e.target.value)}
+                                disabled={Boolean(entry.id) || !isEditScreen || !canUpdate}
+                              />
+                              {!entry.id && isEditScreen && canUpdate && paymentDraft[item.key].amounts.length > 1 && (
+                                <button type="button" onClick={() => onPaymentRemoveAmount(item.key, index)}>−</button>
+                              )}
+                            </div>
+                          ))}
+                          {isEditScreen && canUpdate && (
+                            <button type="button" onClick={() => onPaymentAddAmount(item.key)}>+</button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className={styles.field}>
+                <label>Chofer</label>
+                <select
+                  value={saleDraft.driverId}
+                  disabled={isViewScreen}
+                  onChange={(e) =>
+                    setSaleDraft((prev) => ({
+                      ...prev,
+                      driverId: e.target.value,
+                    }))
+                  }
                 >
-                  −
-                </button>
-              )}
-            </div>
-          ))}
-          {!isViewScreen && (!isEditScreen || canUpdate) && (
-            <button
-              type="button"
-              onClick={() => onPaymentAddAmount(item.key)}
-              style={{ background: "#16a34a", color: "white", border: "none", borderRadius: 4, padding: "0.2rem 0.4rem", cursor: "pointer", fontSize: "0.8rem", alignSelf: "flex-start" }}
-            >
-              +
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  ))}
-</div>
+                  <option value="">Seleccionar chofer</option>
+                  {drivers.map((driver) => (
+                    <option key={driver.id} value={driver.id}>
+                      {driver.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className={styles.field}>
                 <label>Vendedor</label>
@@ -1276,19 +1293,13 @@ export default function Sales(): ReactElement {
                   }}
                 >
                   <select
-                    value={
-                      calculatedStatus === "CANCELLED"
-                        ? "CANCELLED"
-                        : saleDraft.status === "CANCELLED"
-                          ? "CANCELLED"
-                          : calculatedStatus
-                    }
-                    disabled={
-                      !isEditScreen ||
-                      (saleDraft.status !== "PENDING" &&
-                        saleDraft.status !== "PARTIAL")
-                    }
-                    onChange={async (e) => {
+                    value={calculatedStatus}
+                    disabled={!isEditScreen || calculatedStatus === "PAID"}
+                    style={{
+                      opacity:
+                        !isEditScreen || calculatedStatus === "PAID" ? 0.6 : 1,
+                    }}
+                    onChange={(e) => {
                       const newStatus = e.target.value as SaleStatus;
                       setSaleDraft((prev) => ({ ...prev, status: newStatus }));
                     }}
@@ -1461,7 +1472,7 @@ export default function Sales(): ReactElement {
                                       (lineSearch[line.id] ?? "").toLowerCase(),
                                     ),
                                 )
-                                .slice(0, 10);
+                                .slice(0, 5);
                               if (e.key === "ArrowDown") {
                                 e.preventDefault();
                                 setLineDropdownIndex((prev) => ({
@@ -1538,11 +1549,10 @@ export default function Sales(): ReactElement {
                                       (lineSearch[line.id] ?? "").toLowerCase(),
                                     ),
                                 )
-                                .slice(0, 10)
+                                .slice(0, 5)
                                 .map((p, index) => (
                                   <div
                                     key={p.id}
-                                    data-index={index}
                                     className={styles.clientOption}
                                     style={
                                       index ===
@@ -1706,10 +1716,7 @@ export default function Sales(): ReactElement {
           </div>
 
           <div className={styles.formBottomBar}>
-            <p
-              className={styles.totalBar}
-              style={{ fontSize: "2rem", fontWeight: "bold" }}
-            >
+            <p className={styles.totalBar} style={{ fontSize: "2rem", fontWeight: "bold" }}>
               Total: ₡{calculatedTotal.toLocaleString("es-CR")}
             </p>
             <div className={styles.bottomActions}>
@@ -1737,7 +1744,7 @@ export default function Sales(): ReactElement {
                 className={styles.button}
                 type="button"
                 onClick={() =>
-                  navigate("/sales", { state: { selectedId: id } })
+                  navigate("/route-sales", { state: { selectedId: id } })
                 }
               >
                 <u>S</u>alir
@@ -1902,9 +1909,7 @@ export default function Sales(): ReactElement {
                         );
 
                         const updated = await listProducts();
-                        setProducts(
-                          updated.filter((p) => p.status === "ACTIVE"),
-                        );
+                        setProducts(updated.filter(p => p.status === "ACTIVE"));
                         setSaleDraft((prev) => ({
                           ...prev,
                           lines: [
@@ -2153,8 +2158,10 @@ export default function Sales(): ReactElement {
               sale={saleToPrint}
               client={clientsById.get(saleToPrint.clientId)}
               productsById={productsById}
+              routeTicket
             />
           )}
+          
         </section>
       </div>
     );
@@ -2172,7 +2179,7 @@ export default function Sales(): ReactElement {
         display: "flex",
         justifyContent: "center",
         alignItems: "flex-start",
-        padding: "0.5rem",
+        padding: "1rem",
         overflow: "hidden",
         boxSizing: "border-box",
       }}
@@ -2180,7 +2187,7 @@ export default function Sales(): ReactElement {
       {" "}
       <section className={styles.container}>
         <header className={styles.header}>
-          <h2 className={styles.title}>FACTURACIÓN</h2>
+          <h2 className={styles.title}>RUTAS</h2>
           <div className={styles.headerActions}>
             <span style={{ color: "#9ca3af", fontSize: "0.9rem" }}>
               {new Date().toLocaleDateString("es-CR")}
@@ -2195,39 +2202,39 @@ export default function Sales(): ReactElement {
           clients={clients}
           styles={styles}
           isViewScreen={isViewScreen}
-          clientLimit={10}
+          clientLimit={6}
           statusLabels={{
-            pending: "Pendientes",
-            partial: "Parciales",
-            paid: "Pagadas",
-            cancelled: "Canceladas",
+            pending: "Pendiente",
+            partial: "Parcial",
+            paid: "Pagada",
+            cancelled: "Cancelada",
           }}
-          constrainDropdownHeight
           onClear={() => setClientSearch("")}
         />
         <SaleHistoryTable
           sales={sortedAndFilteredSales}
           clientsById={clientsById}
           selectedRowId={selectedRowId}
-          emptyMessage="No hay ventas registradas."
+          emptyMessage="No hay rutas registradas."
           styles={styles}
-          formatInvoiceNumber={(sale) => sale.invoiceNumber}
+          formatInvoiceNumber={(sale) => `R-${String(sale.invoiceNumber).padStart(3, "0")}`}
           formatPaymentMethod={mapPaymentMethod}
           formatStatus={mapStatus}
           onSelect={setSelectedRowId}
         />
 
-        <SalesHistoryActions
+        <RouteSalesHistoryActions
           canCreate={canCreate}
           canDelete={canDelete}
-          canOperateCashRegister={canOperateCaja}
-          cashRegisterOpen={caja.abierta}
+          canCancel={canCancel}
+          canUpdate={canUpdate}
+          canReadDrivers={canReadDrivers}
           hasSelection={Boolean(selectedRowId)}
           selectedStatus={selectedSale?.status}
           styles={styles}
-          onCreate={() => navigate("/sales/new")}
+          onCreate={() => navigate("/route-sales/new")}
           onModify={onAbrirModificar}
-          onView={() => selectedRowId && navigate(`/sales/${selectedRowId}/view`)}
+          onView={() => selectedRowId && navigate(`/route-sales/${selectedRowId}/view`)}
           onPrint={() => {
             const sale = sortedAndFilteredSales.find((s) => s.id === selectedRowId);
             if (sale) printSale(sale);
@@ -2238,10 +2245,8 @@ export default function Sales(): ReactElement {
           }}
           onDelete={() => selectedRowId && void onDeleteSale(selectedRowId)}
           onCancel={() => selectedRowId && onCancelSale(selectedRowId)}
-          onPay={() => selectedRowId && navigate(`/sales/${selectedRowId}/edit`)}
-          onExpenses={() => setShowGastosModal(true)}
-          onOpenCashRegister={() => setShowAbrirCajaModal(true)}
-          onCloseCashRegister={cerrarCaja}
+          onPay={() => selectedRowId && navigate(`/route-sales/${selectedRowId}/edit`)}
+          onDrivers={() => setShowDriversModal(true)}
           onExit={() => navigate("/dashboard")}
         />
         {modal.show && (
@@ -2313,7 +2318,7 @@ export default function Sales(): ReactElement {
               >
                 ⚠️ Recuerde vaciar la memoria del datáfono antes de iniciar.
               </p>
-              <div
+              {canCreateDriver && <div
                 style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}
               >
                 <button
@@ -2330,6 +2335,100 @@ export default function Sales(): ReactElement {
                 >
                   Cancelar
                 </button>
+              </div>}
+            </div>
+          </div>
+        )}
+        {showDriversModal && (
+          <div className={styles.modalBackdrop}>
+            <div className={styles.modal}>
+              <header className={styles.modalHeader}>
+                <h3>Choferes</h3>
+                <button
+                  className={styles.button}
+                  type="button"
+                  onClick={() => setShowDriversModal(false)}
+                >
+                  Cerrar <kbd>Esc</kbd>
+                </button>
+              </header>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 140px auto",
+                  gap: "0.5rem",
+                  marginBottom: "0.75rem",
+                }}
+              >
+                <input
+                  value={driverNameDraft}
+                  onChange={(e) => setDriverNameDraft(e.target.value)}
+                  placeholder="Nombre del chofer"
+                />
+                <select
+                  value={driverStatusDraft}
+                  onChange={(e) =>
+                    setDriverStatusDraft(e.target.value as DriverStatus)
+                  }
+                >
+                  <option value="ACTIVE">Activo</option>
+                  <option value="INACTIVE">Inactivo</option>
+                </select>
+                <button
+                  className={styles.primaryButton}
+                  type="button"
+                  onClick={() => void onCreateDriver()}
+                >
+                  Crear
+                </button>
+              </div>
+
+              <div
+                style={{
+                  maxHeight: 260,
+                  overflowY: "auto",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 8,
+                }}
+              >
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Estado</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {drivers.map((driver) => (
+                      <tr key={driver.id}>
+                        <td>{driver.name}</td>
+                        <td>
+                          {driver.status === "ACTIVE" ? "Activo" : "Inactivo"}
+                        </td>
+                        <td>
+                          <div className={styles.rowActions}>
+                            <button
+                              className={styles.button}
+                              type="button"
+                              onClick={() => void onToggleDriverStatus(driver)}
+                            >
+                              Editar
+                            </button>
+                            {canDeleteDriver && <button
+                              className={styles.dangerButton}
+                              type="button"
+                              onClick={() => void onDeleteDriver(driver)}
+                            >
+                              Eliminar
+                            </button>}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -2339,125 +2438,10 @@ export default function Sales(): ReactElement {
             sale={saleToPrint}
             client={clientsById.get(saleToPrint.clientId)}
             productsById={productsById}
+            routeTicket
           />
         )}
         {!saleToPrint && cierreToPrint && <CierreCajaPrint data={cierreToPrint} />}
-        
-        {showGastosModal && (
-          <div className={styles.modalBackdrop}>
-            <div className={styles.modal}>
-              <header className={styles.modalHeader}>
-                <h3>Gastos del turno</h3>
-                <button
-                  className={styles.button}
-                  type="button"
-                  onClick={() => setShowGastosModal(false)}
-                >
-                  Cerrar
-                </button>
-              </header>
-
-              <div
-                style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}
-              >
-                <div className={styles.field} style={{ flex: 2 }}>
-                  <label>Descripción</label>
-                  <input
-                    type="text"
-                    value={gastoDraft.descripcion}
-                    onChange={(e) =>
-                      setGastoDraft((prev) => ({
-                        ...prev,
-                        descripcion: e.target.value,
-                      }))
-                    }
-                    placeholder="Ej: Gasolina, almuerzo..."
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") agregarGasto();
-                    }}
-                  />
-                </div>
-                <div className={styles.field} style={{ flex: 1 }}>
-                  <label>Monto</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={gastoDraft.monto}
-                    onChange={(e) =>
-                      setGastoDraft((prev) => ({
-                        ...prev,
-                        monto: e.target.value,
-                      }))
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") agregarGasto();
-                    }}
-                  />
-                </div>
-                <div style={{ display: "flex", alignItems: "flex-end" }}>
-                  <button
-                    className={styles.primaryButton}
-                    type="button"
-                    onClick={agregarGasto}
-                  >
-                    Agregar
-                  </button>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  maxHeight: "300px",
-                  overflowY: "auto",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 8,
-                }}
-              >
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>Descripción</th>
-                      <th>Monto</th>
-                      <th>Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {caja.gastos.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className={styles.empty}>
-                          No hay gastos registrados.
-                        </td>
-                      </tr>
-                    ) : (
-                      caja.gastos.map((gasto) => (
-                        <tr key={gasto.id}>
-                          <td>{gasto.descripcion}</td>
-                          <td>₡{gasto.monto.toLocaleString("es-CR")}</td>
-                          <td>
-                            <button
-                              className={styles.dangerButton}
-                              type="button"
-                              onClick={() => eliminarGasto(gasto.id)}
-                            >
-                              Eliminar
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <p style={{ marginTop: "0.5rem", fontWeight: 600 }}>
-                Total gastos: ₡
-                {caja.gastos
-                  .reduce((sum, g) => sum + g.monto, 0)
-                  .toLocaleString("es-CR")}
-              </p>
-            </div>
-          </div>
-        )}
         {whatsappModal?.show && (
           <div className={styles.modalBackdrop}>
             <div className={styles.modal}>
@@ -2471,7 +2455,6 @@ export default function Sales(): ReactElement {
                   Cerrar <kbd>Esc</kbd>
                 </button>
               </header>
-
               <div className={styles.field}>
                 <label>Número de teléfono</label>
                 <input
@@ -2485,7 +2468,6 @@ export default function Sales(): ReactElement {
                   placeholder="Ej: 88888888"
                 />
               </div>
-
               <div className={styles.field} style={{ marginTop: "0.75rem" }}>
                 <label>Mensaje</label>
                 <textarea
@@ -2505,7 +2487,6 @@ export default function Sales(): ReactElement {
                   }}
                 />
               </div>
-
               <div
                 style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}
               >
@@ -2528,118 +2509,56 @@ export default function Sales(): ReactElement {
           </div>
         )}
         {showModificarModal && (
-          <div className={styles.modalBackdrop}>
-            <div className={styles.modal}>
-              <header className={styles.modalHeader}>
-                <h3>Modificar Factura</h3>
-                <button
-                  className={styles.button}
-                  type="button"
-                  onClick={() => setShowModificarModal(false)}
+            <div className={styles.modalBackdrop}>
+              <div className={styles.modal}>
+                <header className={styles.modalHeader}>
+                  <h3>Modificar Factura</h3>
+                  <button
+                    className={styles.button}
+                    type="button"
+                    onClick={() => setShowModificarModal(false)}
+                  >
+                    Cerrar
+                  </button>
+                </header>
+                <div className={styles.field}>
+                  <label>Número de factura</label>
+                  <input
+                    type="number"
+                    autoFocus
+                    value={modificarInvoiceInput}
+                    onChange={(e) => setModificarInvoiceInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void onConfirmarModificar();
+                      if (e.key === "Escape") setShowModificarModal(false);
+                    }}
+                    placeholder="Ej: 123"
+                  />
+                </div>
+                <div
+                  style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}
                 >
-                  Cerrar
-                </button>
-              </header>
-              <div className={styles.field}>
-                <label>Número de factura</label>
-                <input
-                  type="number"
-                  autoFocus
-                  value={modificarInvoiceInput}
-                  onChange={(e) => setModificarInvoiceInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void onConfirmarModificar();
-                    if (e.key === "Escape") setShowModificarModal(false);
-                  }}
-                  placeholder="Ej: 123"
-                />
-              </div>
-              <div
-                style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}
-              >
-                <button
-                  className={styles.primaryButton}
-                  type="button"
-                  onClick={() => void onConfirmarModificar()}
-                >
-                  Abrir
-                </button>
-                <button
-                  className={styles.button}
-                  type="button"
-                  onClick={() => setShowModificarModal(false)}
-                >
-                  Cancelar
-                </button>
+                  <button
+                    className={styles.primaryButton}
+                    type="button"
+                    onClick={() => void onConfirmarModificar()}
+                  >
+                    Abrir
+                  </button>
+                  <button
+                    className={styles.button}
+                    type="button"
+                    onClick={() => setShowModificarModal(false)}
+                  >
+                    Cancelar
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
       </section>
     </div>
   );
-
-  function agregarGasto(): void {
-    if (!gastoDraft.descripcion.trim()) {
-      setError("La descripción del gasto es obligatoria.");
-      return;
-    }
-    if (!gastoDraft.monto || Number(gastoDraft.monto) <= 0) {
-      setError("El monto del gasto debe ser mayor a 0.");
-      return;
-    }
-    const nuevoGasto = {
-      id: crypto.randomUUID(),
-      descripcion: gastoDraft.descripcion.trim(),
-      monto: Number(gastoDraft.monto),
-    };
-    addExpense(nuevoGasto);
-    setGastoDraft({ descripcion: "", monto: "" });
-  }
-
-  function eliminarGasto(id: string): void {
-    removeExpense(id);
-  }
-
-  function enviarWhatsApp(sale: Sale): void {
-    const client = clientsById.get(sale.clientId);
-    const phone = client?.phone ?? "";
-    const mensajePredeterminado = `Hola buenas tardes.!! Adjuntamos la factura que se te entregará el dia de mañana. =)`;
-
-    setWhatsappModal({
-      show: true,
-      sale,
-      mensaje: mensajePredeterminado,
-      telefono: phone,
-    });
-  }
-
-  function confirmarEnvioWhatsApp(): void {
-    if (!whatsappModal?.sale) return;
-    const sale = whatsappModal.sale;
-    const client = clientsById.get(sale.clientId);
-
-    if (!whatsappModal.telefono.trim()) {
-      setModal({
-        show: true,
-        type: "error",
-        title: "Error",
-        message: "El número de teléfono es obligatorio.",
-        confirmLabel: "Aceptar",
-        onConfirm: closeModal,
-      });
-      return;
-    }
-
-    setWhatsappModal(null);
-    generateSaleWhatsappPdf({
-      sale,
-      client,
-      productsById,
-      phone: whatsappModal.telefono,
-      message: whatsappModal.mensaje,
-    });
-  }
 }
 
 function mapStatus(status: SaleStatus): string {
@@ -2649,8 +2568,6 @@ function mapStatus(status: SaleStatus): string {
   if (status === "CANCELLED") {
     return "Cancelada";
   }
-  if (status === "PARTIAL") {
-    return "Parcial";
-  }
   return "Pendiente";
 }
+
