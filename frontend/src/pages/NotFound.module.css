@@ -1,0 +1,348 @@
+.page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: clamp(20px, 4vw, 56px);
+  overflow: hidden;
+  background: #f2f6f2;
+  color: #1f3025;
+}
+
+.content {
+  width: min(100%, 1080px);
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+  align-items: center;
+  gap: clamp(28px, 5vw, 72px);
+  animation: contentEnter 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.hero {
+  position: relative;
+  min-width: 0;
+  min-height: 390px;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+}
+
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 50% 4% auto;
+  z-index: -1;
+  height: 1px;
+  background: #cbd8ce;
+}
+
+.code {
+  color: #315c3c;
+  font-size: clamp(152px, 23vw, 292px);
+  font-weight: 800;
+  line-height: 0.78;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.vineLeft,
+.vineRight {
+  position: absolute;
+  width: 92px;
+  height: 150px;
+  border-left: 3px solid #66866d;
+  border-radius: 50%;
+  transform-origin: bottom center;
+}
+
+.vineLeft {
+  top: 33px;
+  left: 9%;
+  transform: rotate(-27deg);
+  animation: vineSwayLeft 6s ease-in-out infinite;
+}
+
+.vineRight {
+  right: 8%;
+  bottom: 43px;
+  height: 124px;
+  transform: rotate(151deg);
+  animation: vineSwayRight 6.6s ease-in-out 240ms infinite;
+}
+
+.vineLeaf,
+.wiltedLeaf {
+  position: absolute;
+  display: block;
+  width: 31px;
+  height: 18px;
+  border: 1px solid #496e52;
+  border-radius: 100% 0 100% 0;
+  background: #789b7e;
+}
+
+.vineLeafOne {
+  top: 20px;
+  left: -24px;
+  transform: rotate(16deg);
+}
+
+.vineLeafTwo {
+  top: 57px;
+  left: 10px;
+  border-radius: 0 100% 0 100%;
+  transform: rotate(-8deg);
+}
+
+.vineLeafThree {
+  top: 98px;
+  left: -13px;
+  transform: rotate(26deg);
+}
+
+.vineLeafFour {
+  top: 23px;
+  left: -23px;
+  transform: rotate(12deg);
+}
+
+.vineLeafFive {
+  top: 65px;
+  left: 8px;
+  border-radius: 0 100% 0 100%;
+  transform: rotate(-12deg);
+}
+
+.wiltedPlant {
+  position: absolute;
+  right: 2%;
+  bottom: 2px;
+  width: 104px;
+  height: 154px;
+}
+
+.wiltedStem {
+  position: absolute;
+  right: 39px;
+  bottom: 48px;
+  width: 3px;
+  height: 82px;
+  border-radius: 3px;
+  background: #58745e;
+  transform: rotate(17deg);
+  transform-origin: bottom center;
+  animation: stemSway 5.8s ease-in-out infinite;
+}
+
+.wiltedStem::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: -19px;
+  width: 24px;
+  height: 28px;
+  border-top: 3px solid #58745e;
+  border-radius: 50%;
+  transform: rotate(34deg);
+}
+
+.wiltedLeaf {
+  z-index: 2;
+  background: #6f8e72;
+  transform-origin: center;
+}
+
+.wiltedLeafLeft {
+  top: 60px;
+  left: 16px;
+  transform: rotate(-12deg);
+  animation: leafDriftLeft 5.4s ease-in-out 140ms infinite;
+}
+
+.wiltedLeafRight {
+  top: 35px;
+  right: 2px;
+  border-radius: 0 100% 0 100%;
+  transform: rotate(52deg);
+  animation: leafDriftRight 5.9s ease-in-out infinite;
+}
+
+.potRim {
+  position: absolute;
+  z-index: 3;
+  left: 20px;
+  bottom: 39px;
+  width: 66px;
+  height: 12px;
+  border-radius: 3px;
+  background: #a96249;
+}
+
+.pot {
+  position: absolute;
+  z-index: 2;
+  left: 27px;
+  bottom: 4px;
+  width: 52px;
+  height: 40px;
+  background: #bc7155;
+  clip-path: polygon(0 0, 100% 0, 82% 100%, 18% 100%);
+}
+
+.potShadow {
+  position: absolute;
+  bottom: 0;
+  left: 16px;
+  width: 73px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(38, 65, 45, 0.14);
+}
+
+.message {
+  max-width: 390px;
+  padding: 12px 0;
+}
+
+.kicker {
+  margin: 0 0 14px;
+  color: #55725c;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+  color: #1f3025;
+  font-size: clamp(32px, 4vw, 46px);
+  font-weight: 720;
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.description {
+  margin: 20px 0 30px;
+  color: #657168;
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.button {
+  min-height: 46px;
+  padding: 12px 22px;
+  border: 1px solid #315c3c;
+  border-radius: 6px;
+  background: #315c3c;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.button:hover {
+  background: #264b31;
+  box-shadow: 0 9px 20px rgba(38, 75, 49, 0.2);
+  transform: translateY(-2px);
+}
+
+.button:active {
+  box-shadow: none;
+  transform: translateY(0) scale(0.98);
+}
+
+.button:focus-visible {
+  outline: 3px solid rgba(49, 92, 60, 0.28);
+  outline-offset: 3px;
+}
+
+@keyframes contentEnter {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes vineSwayLeft {
+  0%, 100% { transform: rotate(-27deg); }
+  50% { transform: rotate(-25deg) translateY(-2px); }
+}
+
+@keyframes vineSwayRight {
+  0%, 100% { transform: rotate(151deg); }
+  50% { transform: rotate(153deg) translateY(-2px); }
+}
+
+@keyframes stemSway {
+  0%, 100% { transform: rotate(17deg); }
+  50% { transform: rotate(19deg); }
+}
+
+@keyframes leafDriftLeft {
+  0%, 100% { transform: rotate(-12deg); }
+  50% { transform: rotate(-9deg) translateY(1px); }
+}
+
+@keyframes leafDriftRight {
+  0%, 100% { transform: rotate(52deg); }
+  50% { transform: rotate(55deg) translateY(1px); }
+}
+
+@media (max-width: 800px) {
+  .content {
+    width: min(100%, 620px);
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .hero {
+    min-height: clamp(245px, 54vw, 330px);
+  }
+
+  .code {
+    font-size: clamp(128px, 40vw, 230px);
+  }
+
+  .message {
+    max-width: 480px;
+    padding: 0 16px 20px;
+  }
+
+  .wiltedPlant {
+    right: 7%;
+    transform: scale(0.84);
+    transform-origin: bottom right;
+  }
+}
+
+@media (max-width: 480px) {
+  .page { padding: 20px; }
+  .hero { min-height: 220px; }
+  .code { font-size: clamp(112px, 39vw, 170px); }
+  .vineLeft { left: 4%; transform: scale(0.75) rotate(-27deg); animation: none; }
+  .vineRight { right: 2%; transform: scale(0.75) rotate(151deg); animation: none; }
+  .wiltedPlant { right: 0; transform: scale(0.68); }
+  .message { padding: 10px 2px 8px; }
+  .title { font-size: 32px; }
+  .button { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content,
+  .vineLeft,
+  .vineRight,
+  .wiltedStem,
+  .wiltedLeafLeft,
+  .wiltedLeafRight {
+    animation: none;
+  }
+
+  .button {
+    transition: none;
+  }
+
+  .button:hover,
+  .button:active {
+    transform: none;
+  }
+}

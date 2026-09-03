@@ -1,0 +1,169 @@
+.shell {
+  min-height: 100vh;
+  padding: 0.5rem;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+  background: #f0f4f0;
+}
+
+.container {
+  width: 100%;
+  max-width: 1200px;
+  height: calc(100vh - 1rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.07);
+}
+
+.header {
+  min-height: 58px;
+  padding: 0.75rem 1.25rem;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #1f2937;
+}
+
+.title {
+  width: 145px;
+  height: 20px;
+  border-radius: 4px;
+  background: #4b5563;
+}
+
+.headerAction,
+.action,
+.formButton {
+  width: 82px;
+  height: 32px;
+  border-radius: 7px;
+}
+
+.filters,
+.formCard {
+  padding: 0.8rem 1.25rem;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.85rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.formCard {
+  margin: 1rem 1rem 0;
+  flex-wrap: wrap;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.filterField,
+.formField {
+  width: 132px;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.formField {
+  flex: 1 1 145px;
+}
+
+.label {
+  width: 58px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.control {
+  height: 32px;
+  border-radius: 6px;
+}
+
+.tableCard {
+  flex: 1;
+  min-height: 0;
+  padding: 1rem;
+  overflow: auto;
+}
+
+.search {
+  width: min(520px, 72%);
+  height: 34px;
+  margin-bottom: 0.8rem;
+  border-radius: 7px;
+}
+
+.table {
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.tableHeader,
+.tableRow {
+  min-height: 45px;
+  display: grid;
+  align-items: center;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.tableHeader {
+  background: #f9fafb;
+}
+
+.tableRow:last-child {
+  border-bottom: 0;
+}
+
+.tableHeader > span,
+.tableRow > span {
+  height: 13px;
+  margin: auto;
+  border-radius: 4px;
+}
+
+.tableHeader > span {
+  width: 58%;
+  height: 11px;
+}
+
+.footer {
+  min-height: 58px;
+  padding: 0.75rem 1.25rem;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  background: #1f2937;
+}
+
+.footer > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.footer span {
+  width: 78px;
+  height: 31px;
+  border-radius: 7px;
+  background: #4b5563;
+}
+
+@media (max-width: 760px) {
+  .filters {
+    flex-wrap: wrap;
+  }
+
+  .filterField {
+    flex: 1 1 120px;
+  }
+
+  .footer {
+    flex-direction: column;
+  }
+}

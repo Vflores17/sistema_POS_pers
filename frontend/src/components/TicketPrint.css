@@ -1,0 +1,170 @@
+.ticket {
+    display: none;
+}
+
+@media print {
+    .espacio-anotaciones {
+    height: 50mm;
+}
+    @page {
+        margin: 0;
+        size: 80mm auto;
+    }
+
+    body > * {
+        display: none !important;
+    }
+
+    .ticket {
+        display: block !important;
+        width: 76mm;
+        padding: 2mm 3mm;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 10pt;
+        line-height: 0.9;
+        color: black;
+    }
+
+    .gracias {
+        text-align: center;
+        margin-bottom: 3mm;
+        font-size: 11pt;
+        font-weight: bold;
+    }
+
+    .header-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 2mm;
+    }
+
+    .factura-num {
+        font-weight: bold;
+        font-size: 12pt;
+    }
+
+    .fecha-hora {
+        text-align: right;
+        font-size: 9pt;
+        line-height: 1.1;
+    }
+
+    .cliente {
+        margin: 2mm 0 1mm 0;
+        font-size: 10pt;
+    }
+
+    .cliente-nombre {
+        margin: 1mm 0 2mm 0;
+        font-size: 9pt;
+        font-weight: bold;
+    }
+
+    .divider {
+        border-top: 1px dashed black;
+        margin: 2mm 0;
+        height: 0;
+        font-size: 0;
+    }
+
+    .productos {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .productos th {
+        text-align: left;
+        font-size: 9pt;
+        padding-bottom: 1mm;
+        border-bottom: 1px dashed black;
+    }
+
+    .productos th.col-cant {
+        text-align: center;
+    }
+
+    .productos th.col-total {
+        text-align: right;
+    }
+
+    .productos td {
+        padding: 0.08mm 0;
+        font-size: 9pt;
+        vertical-align: top;
+        line-height: 1.1;
+    }
+
+    .col-cant {
+        width: 12mm;
+        text-align: center;
+    }
+
+    .col-desc {
+        width: auto;
+        text-align: left;
+    }
+
+    .productos td.col-desc {
+        padding-left: 3mm;
+    }
+
+    .col-total {
+        width: 22mm;
+        text-align: right;
+    }
+
+    .total-cant {
+        font-weight: bold;
+        margin: 1mm 0;
+        font-size: 9pt;
+        text-align: left;
+    }
+
+    .totales {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1mm 0;
+    }
+
+    .totales tr td:first-child {
+        text-align: left;
+        padding-right: 3mm;
+        font-size: 10pt;
+    }
+
+    .totales tr td:last-child {
+        text-align: right;
+        width: 22mm;
+        font-size: 11pt;
+    }
+
+    .pagos {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1mm 0;
+    }
+
+    .pagos tr td:first-child {
+    text-align: left;
+    padding-right: 3mm;
+    padding-top: 0.5mm;
+    padding-bottom: 0.5mm;
+    font-size: 9pt;
+}
+
+.pagos tr td:last-child {
+    text-align: right;
+    width: 22mm;
+    padding-top: 0.5mm;
+    padding-bottom: 0.5mm;
+    font-size: 9pt;
+}
+
+    .estado {
+        text-align: center;
+        font-weight: bold;
+        font-size: 9pt;
+        margin-top: 3mm;
+    }
+}
