@@ -345,7 +345,25 @@ kbd {
 .gridTable {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: 0.9rem;
+}
+
+.gridTable th:nth-child(1),
+.gridTable td:nth-child(1) {
+  width: 45%;
+}
+
+.gridTable th:nth-child(2),
+.gridTable td:nth-child(2) {
+  width: 15%;
+}
+
+.gridTable th:nth-child(3),
+.gridTable td:nth-child(3),
+.gridTable th:nth-child(4),
+.gridTable td:nth-child(4) {
+  width: 20%;
 }
 
 .gridTable thead th {
@@ -375,7 +393,8 @@ kbd {
 }
 
 .gridTable input[type="number"] {
-  width: 70px;
+  width: 100%;
+  box-sizing: border-box;
   border: 1px solid #d1d5db;
   border-radius: 6px;
   padding: 0.3rem 0.5rem;

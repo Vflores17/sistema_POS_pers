@@ -15,46 +15,53 @@ interface WhatsappExportOptions<TSale> {
 
 export function generateCashClosureExcel(
   movements: SalePaymentMovement[],
-  fromTime: number,
+  _fromTime: number,
   toTime: number,
   clientsById: Map<string, Client>,
   expenses: CashRegisterExpense[],
 ): void {
   const emptyRow = (): Record<string, string | number> => ({
-    Factura: "", Fecha: "", Cliente: "", Movimiento: "",
-    Efectivo: "", SINPE: "", Transferencia: "", Tarjeta: "",
+    Cliente: "", Efectivo: "", "": "", "SINPE/Transferencia": "", Tarjeta: "",
   });
-  const rows: Record<string, string | number>[] = movements.map((payment) => ({
-    Factura: payment.invoiceNumber,
-    Fecha: new Date(payment.createdAt).toLocaleString("es-CR"),
-    Cliente: clientsById.get(payment.clientId)?.name ?? payment.clientId,
-    Movimiento: new Date(payment.saleCreatedAt).getTime() < fromTime
-      ? "Abono de factura anterior"
-      : "Pago de factura del turno",
-    Efectivo: payment.method === "CASH" ? Number(payment.amount) : "",
-    SINPE: payment.method === "SINPE" ? Number(payment.amount) : "",
-    Transferencia: payment.method === "TRANSFER" ? Number(payment.amount) : "",
-    Tarjeta: payment.method === "CARD" ? Number(payment.amount) : "",
-  }));
+  const rowsBySale = new Map<string, Record<string, string | number>>();
+  movements.forEach((payment) => {
+    const row = rowsBySale.get(payment.saleId) ?? {
+      ...emptyRow(),
+      Cliente: clientsById.get(payment.clientId)?.name ?? payment.clientId,
+    };
+    const amount = Number(payment.amount);
+    if (payment.method === "CASH") {
+      row.Efectivo = Number(row.Efectivo || 0) + amount;
+    } else if (payment.method === "SINPE" || payment.method === "TRANSFER") {
+      row["SINPE/Transferencia"] = Number(row["SINPE/Transferencia"] || 0) + amount;
+    } else if (payment.method === "CARD") {
+      row.Tarjeta = Number(row.Tarjeta || 0) + amount;
+    }
+    rowsBySale.set(payment.saleId, row);
+  });
+  const rows = Array.from(rowsBySale.values());
   const totalByMethod = (method: PaymentMethod): number => movements
     .filter((payment) => payment.method === method)
     .reduce((sum, payment) => sum + Number(payment.amount), 0);
   const totalEfectivo = totalByMethod("CASH");
-  const totalSinpe = totalByMethod("SINPE");
-  const totalTransferencia = totalByMethod("TRANSFER");
-  const totalTarjeta = totalByMethod("CARD");
   rows.push(emptyRow());
-  rows.push({ ...emptyRow(), Movimiento: "TOTALES RECIBIDOS", Efectivo: totalEfectivo,
-    SINPE: totalSinpe, Transferencia: totalTransferencia, Tarjeta: totalTarjeta });
+  const totalRow = rows.length + 1;
+  rows.push({ ...emptyRow(), Cliente: "TOTAL EFECTIVO", Efectivo: totalEfectivo });
   rows.push(emptyRow());
   expenses.forEach((expense) => {
-    rows.push({ ...emptyRow(), Cliente: expense.descripcion, Movimiento: "Gasto", Efectivo: -expense.monto });
+    rows.push({ ...emptyRow(), Cliente: expense.descripcion, Efectivo: Math.abs(expense.monto) });
   });
   const totalGastos = expenses.reduce((sum, expense) => sum + expense.monto, 0);
   rows.push(emptyRow());
-  rows.push({ ...emptyRow(), Movimiento: "EFECTIVO NETO", Efectivo: totalEfectivo - totalGastos });
+  rows.push({ ...emptyRow(), Cliente: "EFECTIVO NETO", Efectivo: totalEfectivo - totalGastos });
 
   const worksheet = XLSX.utils.json_to_sheet(rows);
+  if (rowsBySale.size > 0) {
+    worksheet[`B${totalRow + 1}`] = {
+      t: "n",
+      f: `SUM(B2:B${rowsBySale.size + 1})`,
+    };
+  }
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Cierre de Caja");
   XLSX.writeFile(
