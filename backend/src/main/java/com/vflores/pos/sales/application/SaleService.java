@@ -17,6 +17,7 @@ import com.vflores.pos.sales.domain.repository.SalePaymentRepository;
 import com.vflores.pos.sales.domain.repository.SaleRepository;
 import com.vflores.pos.shared.exception.ConflictException;
 import com.vflores.pos.shared.exception.ResourceNotFoundException;
+import com.vflores.pos.shared.application.PriceOverrideGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ import com.vflores.pos.products.domain.model.ProductPriceType;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -50,11 +52,14 @@ import static com.vflores.pos.shared.application.PaymentValidationSupport.requir
 @RequiredArgsConstructor
 public class SaleService {
 
+    private static final String SALE_PRICE_OVERRIDE = "SALE_PRICE_OVERRIDE";
+
     private final SaleRepository saleRepository;
     private final ProductRepository productRepository;
     private final ClientRepository clientRepository;
     private final ProductPriceRepository productPriceRepository;
     private final SalePaymentRepository salePaymentRepository;
+    private final PriceOverrideGuard priceOverrideGuard;
     //private SaleMapper saleMapper;
 
     @Transactional(readOnly = true)
@@ -73,7 +78,8 @@ public class SaleService {
 
     @Transactional
     public SaleResponse create(CreateSaleRequest request) {
-        SaleComputation computation = computeSale(request.clientId(), request.items());
+        SaleComputation computation = computeSale(
+                request.clientId(), request.items(), SALE_PRICE_OVERRIDE, null);
         Long nextInvoiceNumber = saleRepository.findMaxInvoiceNumber() + 1;
         Sale.PaymentMethod paymentMethod = request.paymentMethod() == null
                 ? Sale.PaymentMethod.CASH
@@ -105,21 +111,23 @@ public class SaleService {
         Sale sale = saleRepository.findByIdWithDetails(saleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Sale not found: " + saleId));
 
+        if (sale.getStatus() == Sale.SaleStatus.CANCELLED) {
+            throw new ConflictException("Cannot modify a cancelled sale");
+        }
+
         if (request.items() == null || request.items().isEmpty()) {
             throw new ConflictException("Sale items cannot be empty");
         }
+
+        Map<UUID, BigDecimal> historicalPrices = historicalPricesByProduct(sale.getDetails());
 
         // 2. Restaurar stock anterior (rollback de venta vieja)
         restoreStockFromDetails(sale.getDetails(), SaleDetail::getProduct, SaleDetail::getQuantity);
 
         // 3. Recalcular nueva venta (VALIDA TODO)
-        SaleComputation computation = computeSale(request.clientId(),request.items());
+        SaleComputation computation = computeSale(
+                request.clientId(), request.items(), SALE_PRICE_OVERRIDE, historicalPrices);
 
-        if (request.status() != null) {
-    sale.setStatus(request.status());
-} else {
-    sale.setStatus(Sale.SaleStatus.PENDING);
-}
         // 4. Actualizar datos de la venta
         sale.setUserId(getCurrentUserId());
         sale.setClientId(request.clientId());
@@ -149,7 +157,12 @@ public class SaleService {
         saleRepository.delete(sale);
     }
 
-    private SaleComputation computeSale(UUID clientId, List<SaleItemRequest> items) {
+    private SaleComputation computeSale(
+            UUID clientId,
+            List<SaleItemRequest> items,
+            String overridePermission,
+            Map<UUID, BigDecimal> historicalPrices
+    ) {
         if (clientId == null) {
             throw new ConflictException("clientId is required");
         }
@@ -198,12 +211,28 @@ Map<UUID, BigDecimal> requestedQuantities = aggregateQuantities(
             if (price == null) {
                 throw new ConflictException("Product price is null: " + product.getName());
             }
+            if (price.signum() <= 0) {
+                throw new ConflictException("Price must be greater than 0");
+            }
 
-BigDecimal subtotal = price.multiply(item.quantity());            lines.add(new SaleLineData(product, item.quantity(), price, subtotal));
+            BigDecimal storedPrice = historicalPrices == null
+                    ? null
+                    : historicalPrices.get(product.getId());
+            priceOverrideGuard.requireApprovedPrice(price, productPrice.getPrice(), storedPrice, overridePermission);
+
+            BigDecimal subtotal = price.multiply(item.quantity());            lines.add(new SaleLineData(product, item.quantity(), price, subtotal));
             total = total.add(subtotal);
         }
 
         return new SaleComputation(requestedQuantities, productsById, lines, total);
+    }
+
+    private Map<UUID, BigDecimal> historicalPricesByProduct(List<SaleDetail> details) {
+        Map<UUID, BigDecimal> historicalPrices = new HashMap<>();
+        for (SaleDetail detail : details) {
+            historicalPrices.putIfAbsent(detail.getProduct().getId(), detail.getPrice());
+        }
+        return historicalPrices;
     }
 
         private void validateStockAvailability(Map<UUID, Integer> requested, Map<UUID, Product> productsById) {
@@ -318,6 +347,10 @@ BigDecimal subtotal = price.multiply(item.quantity());            lines.add(new 
     public SaleResponse savePayments(UUID saleId, List<CreateSalePaymentRequest> payments) {
         Sale sale = saleRepository.findByIdWithDetails(saleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Sale not found: " + saleId));
+
+        if (sale.getStatus() == Sale.SaleStatus.CANCELLED) {
+            throw new ConflictException("Cannot modify a cancelled sale");
+        }
 
         List<CreateSalePaymentRequest> requestedPayments = payments == null ? List.of() : payments;
         boolean identifiedRequest = requestedPayments.stream().anyMatch(request -> request.id() != null);

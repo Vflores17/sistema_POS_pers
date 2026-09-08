@@ -22,6 +22,7 @@ import com.vflores.pos.routesales.domain.model.RouteSaleDetail;
 import com.vflores.pos.routesales.domain.model.RouteSalePayment;
 import com.vflores.pos.routesales.domain.repository.RouteSalePaymentRepository;
 import com.vflores.pos.routesales.domain.repository.RouteSaleRepository;
+import com.vflores.pos.shared.application.PriceOverrideGuard;
 import com.vflores.pos.shared.exception.ConflictException;
 import com.vflores.pos.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +39,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 
 import static com.vflores.pos.shared.application.AuthenticatedUserSupport.getCurrentUserId;
@@ -51,12 +53,15 @@ import static com.vflores.pos.shared.application.PaymentValidationSupport.requir
 @RequiredArgsConstructor
 public class RouteSaleService {
 
+    private static final String ROUTE_PRICE_OVERRIDE = "ROUTE_PRICE_OVERRIDE";
+
     private final RouteSaleRepository routeSaleRepository;
     private final RouteSalePaymentRepository routeSalePaymentRepository;
     private final ProductRepository productRepository;
     private final ClientRepository clientRepository;
     private final DriverRepository driverRepository;
     private final ProductPriceRepository productPriceRepository;
+    private final PriceOverrideGuard priceOverrideGuard;
 
     @Transactional(readOnly = true)
     public List<RouteSaleResponse> findAll() {
@@ -75,7 +80,8 @@ public class RouteSaleService {
     @Transactional
     public RouteSaleResponse create(CreateRouteSaleRequest request) {
         validateDriver(request.driverId());
-        SaleComputation computation = computeRouteSale(request.clientId(), request.items());
+        SaleComputation computation = computeRouteSale(
+                request.clientId(), request.items(), ROUTE_PRICE_OVERRIDE, null);
         Long nextInvoiceNumber = routeSaleRepository.findMaxInvoiceNumber() + 1;
 
         RouteSale routeSale = RouteSale.builder()
@@ -102,14 +108,20 @@ public class RouteSaleService {
         RouteSale routeSale = routeSaleRepository.findByIdWithDetails(routeSaleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Route sale not found: " + routeSaleId));
 
+        if (routeSale.getStatus() == RouteSale.RouteStatus.CANCELLED) {
+            throw new ConflictException("Cannot modify a cancelled route sale");
+        }
+
         if (request.items() == null || request.items().isEmpty()) {
             throw new ConflictException("Route sale items cannot be empty");
         }
 
         validateDriver(request.driverId());
+        Map<UUID, BigDecimal> historicalPrices = historicalPricesByProduct(routeSale.getDetails());
         restoreStockFromDetails(
                 routeSale.getDetails(), RouteSaleDetail::getProduct, RouteSaleDetail::getQuantity);
-        SaleComputation computation = computeRouteSale(request.clientId(), request.items());
+        SaleComputation computation = computeRouteSale(
+                request.clientId(), request.items(), ROUTE_PRICE_OVERRIDE, historicalPrices);
 
         routeSale.setUserId(getCurrentUserId());
         routeSale.setClientId(request.clientId());
@@ -140,6 +152,10 @@ public class RouteSaleService {
     public RouteSaleResponse savePayments(UUID routeSaleId, List<CreateRouteSalePaymentRequest> payments) {
         RouteSale routeSale = routeSaleRepository.findByIdWithDetails(routeSaleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Route sale not found: " + routeSaleId));
+
+        if (routeSale.getStatus() == RouteSale.RouteStatus.CANCELLED) {
+            throw new ConflictException("Cannot modify a cancelled route sale");
+        }
 
         List<CreateRouteSalePaymentRequest> requestedPayments = payments == null ? List.of() : payments;
         boolean identifiedRequest = requestedPayments.stream().anyMatch(request -> request.id() != null);
@@ -236,7 +252,12 @@ public class RouteSaleService {
         return toResponse(saved);
     }
 
-    private SaleComputation computeRouteSale(UUID clientId, List<RouteSaleItemRequest> items) {
+    private SaleComputation computeRouteSale(
+            UUID clientId,
+            List<RouteSaleItemRequest> items,
+            String overridePermission,
+            Map<UUID, BigDecimal> historicalPrices
+    ) {
         if (clientId == null) {
             throw new ConflictException("clientId is required");
         }
@@ -269,11 +290,31 @@ Map<UUID, BigDecimal> requestedQuantities = aggregateQuantities(
                     ));
 
             BigDecimal price = item.price() != null ? item.price() : productPrice.getPrice();
-BigDecimal subtotal = price.multiply(item.quantity());lines.add(new SaleLineData(product, item.quantity(), price, subtotal));
+            if (price == null) {
+                throw new ConflictException("Product price is null: " + product.getName());
+            }
+            if (price.signum() <= 0) {
+                throw new ConflictException("Price must be greater than 0");
+            }
+
+            BigDecimal storedPrice = historicalPrices == null
+                    ? null
+                    : historicalPrices.get(product.getId());
+            priceOverrideGuard.requireApprovedPrice(price, productPrice.getPrice(), storedPrice, overridePermission);
+
+            BigDecimal subtotal = price.multiply(item.quantity());lines.add(new SaleLineData(product, item.quantity(), price, subtotal));
 total = total.add(subtotal);
         }
 
         return new SaleComputation(requestedQuantities, productsById, lines, total);
+    }
+
+    private Map<UUID, BigDecimal> historicalPricesByProduct(List<RouteSaleDetail> details) {
+        Map<UUID, BigDecimal> historicalPrices = new HashMap<>();
+        for (RouteSaleDetail detail : details) {
+            historicalPrices.putIfAbsent(detail.getProduct().getId(), detail.getPrice());
+        }
+        return historicalPrices;
     }
 
     private List<RouteSaleDetail> buildDetails(RouteSale routeSale, List<SaleLineData> lines) {

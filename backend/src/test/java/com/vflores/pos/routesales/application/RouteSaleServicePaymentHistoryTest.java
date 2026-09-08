@@ -10,6 +10,7 @@ import com.vflores.pos.routesales.domain.model.RouteSalePayment;
 import com.vflores.pos.routesales.domain.repository.RouteSalePaymentRepository;
 import com.vflores.pos.routesales.domain.repository.RouteSaleRepository;
 import com.vflores.pos.sales.domain.model.Sale;
+import com.vflores.pos.shared.application.PriceOverrideGuard;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -31,7 +32,7 @@ class RouteSaleServicePaymentHistoryTest {
         RouteSalePaymentRepository paymentRepository = mock(RouteSalePaymentRepository.class);
         RouteSaleService service = new RouteSaleService(routeSaleRepository, paymentRepository,
                 mock(ProductRepository.class), mock(ClientRepository.class), mock(DriverRepository.class),
-                mock(ProductPriceRepository.class));
+                mock(ProductPriceRepository.class), mock(PriceOverrideGuard.class));
         OffsetDateTime from = OffsetDateTime.now().minusHours(6);
         OffsetDateTime to = OffsetDateTime.now();
         OffsetDateTime routeCreatedAt = from.minusDays(4);
@@ -59,7 +60,7 @@ class RouteSaleServicePaymentHistoryTest {
         RouteSaleService service = new RouteSaleService(routeSaleRepository,
                 mock(RouteSalePaymentRepository.class), mock(ProductRepository.class),
                 mock(ClientRepository.class), mock(DriverRepository.class),
-                mock(ProductPriceRepository.class));
+                mock(ProductPriceRepository.class), mock(PriceOverrideGuard.class));
 
         UUID routeSaleId = UUID.randomUUID();
         UUID paymentId = UUID.randomUUID();

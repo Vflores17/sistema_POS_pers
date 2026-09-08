@@ -16,7 +16,6 @@ public record CreateSaleRequest(
         @NotEmpty
         List<@Valid SaleItemRequest> items,
 
-        String comments,      
-        Sale.SaleStatus status    
+        String comments
 ) {
 }

@@ -18,6 +18,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -134,6 +135,40 @@ class AdministrativeAuthorizationTest {
                 .contentType("application/json").content(body)).andExpect(status().isOk());
         mockMvc.perform(delete("/api/v1/users/{id}/permission-overrides", ID).with(csrf()))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = "USER_ASSIGN_PERMISSION")
+    void selfAllowByNonAdminIsForbiddenEvenWithAdministrativeAuthority() throws Exception {
+        when(userPermissionService.replace(any(), any()))
+                .thenThrow(new AccessDeniedException("denied"));
+        String body = "{\"overrides\":[{\"permissionId\":\"" + PERMISSION_ID + "\",\"effect\":\"ALLOW\"}]}";
+
+        mockMvc.perform(put("/api/v1/users/{id}/permission-overrides", ID).with(csrf())
+                        .contentType("application/json").content(body))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = "USER_ASSIGN_PERMISSION")
+    void modifyingAnotherUsersOverridesByNonAdminIsForbidden() throws Exception {
+        when(userPermissionService.replace(any(), any()))
+                .thenThrow(new AccessDeniedException("denied"));
+        String body = "{\"overrides\":[{\"permissionId\":\"" + PERMISSION_ID + "\",\"effect\":\"DENY\"}]}";
+
+        mockMvc.perform(put("/api/v1/users/{id}/permission-overrides", ID).with(csrf())
+                        .contentType("application/json").content(body))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = "USER_ASSIGN_PERMISSION")
+    void clearingAnotherUsersOverridesByNonAdminIsForbidden() throws Exception {
+        when(userPermissionService.clear(any()))
+                .thenThrow(new AccessDeniedException("denied"));
+
+        mockMvc.perform(delete("/api/v1/users/{id}/permission-overrides", ID).with(csrf()))
+                .andExpect(status().isForbidden());
     }
 
     @Test

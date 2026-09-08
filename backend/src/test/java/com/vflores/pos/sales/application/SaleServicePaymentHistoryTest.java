@@ -8,6 +8,7 @@ import com.vflores.pos.sales.domain.model.Sale;
 import com.vflores.pos.sales.domain.model.SalePayment;
 import com.vflores.pos.sales.domain.repository.SalePaymentRepository;
 import com.vflores.pos.sales.domain.repository.SaleRepository;
+import com.vflores.pos.shared.application.PriceOverrideGuard;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -28,7 +29,8 @@ class SaleServicePaymentHistoryTest {
         SaleRepository saleRepository = mock(SaleRepository.class);
         SalePaymentRepository paymentRepository = mock(SalePaymentRepository.class);
         SaleService service = new SaleService(saleRepository, mock(ProductRepository.class),
-                mock(ClientRepository.class), mock(ProductPriceRepository.class), paymentRepository);
+                mock(ClientRepository.class), mock(ProductPriceRepository.class), paymentRepository,
+                mock(PriceOverrideGuard.class));
         OffsetDateTime from = OffsetDateTime.now().minusHours(8);
         OffsetDateTime to = OffsetDateTime.now();
         OffsetDateTime saleCreatedAt = from.minusDays(2);
@@ -55,7 +57,7 @@ class SaleServicePaymentHistoryTest {
         SaleRepository saleRepository = mock(SaleRepository.class);
         SaleService service = new SaleService(saleRepository, mock(ProductRepository.class),
                 mock(ClientRepository.class), mock(ProductPriceRepository.class),
-                mock(SalePaymentRepository.class));
+                mock(SalePaymentRepository.class), mock(PriceOverrideGuard.class));
 
         UUID saleId = UUID.randomUUID();
         UUID paymentId = UUID.randomUUID();

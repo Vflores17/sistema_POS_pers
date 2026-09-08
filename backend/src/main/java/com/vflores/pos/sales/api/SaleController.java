@@ -88,7 +88,7 @@ public class SaleController {
     @PatchMapping("/{id}/status")
     public ResponseEntity<SaleResponse> updateStatus(
             @PathVariable UUID id,
-            @RequestBody UpdateSaleStatusRequest request,
+            @Valid @RequestBody UpdateSaleStatusRequest request,
             @RequestHeader(value = "X-Admin-Authorization", required = false) String adminAuthorization,
             Authentication authentication
     ) {

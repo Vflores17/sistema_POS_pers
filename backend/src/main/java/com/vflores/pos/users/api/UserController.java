@@ -10,7 +10,6 @@ import com.vflores.pos.users.api.dto.UserPermissionsResponse;
 import com.vflores.pos.users.api.dto.UserResponse;
 import com.vflores.pos.users.application.UserPermissionService;
 import com.vflores.pos.users.application.UserService;
-import com.vflores.pos.auth.infrastructure.security.AuthenticatedUser;
 import com.vflores.pos.users.domain.model.UserStatus;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +19,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -108,12 +106,10 @@ public class UserController {
     @PutMapping("/{id}/permission-overrides")
     public ResponseEntity<ApiResponse<UserPermissionsResponse>> replacePermissionOverrides(
             @PathVariable UUID id,
-            @Valid @RequestBody ReplacePermissionOverridesRequest request,
-            @AuthenticationPrincipal AuthenticatedUser currentUser
+            @Valid @RequestBody ReplacePermissionOverridesRequest request
     ) {
-        UUID createdById = currentUser == null ? null : currentUser.getId();
         return ResponseEntity.ok(ApiResponse.ok(
-                userPermissionService.replace(id, request.overrides(), createdById)
+                userPermissionService.replace(id, request.overrides())
         ));
     }
 

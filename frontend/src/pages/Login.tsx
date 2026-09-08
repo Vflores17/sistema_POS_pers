@@ -17,10 +17,7 @@ function Login() {
     setError(false);
     setLoading(true);
     try {
-      const data = await login(username, password);
-      localStorage.setItem("token", data.data.accessToken);
-      if (data.data.refreshToken)
-        localStorage.setItem("refreshToken", data.data.refreshToken);
+      await login(username, password);
       await reloadPermissions();
       navigate("/dashboard");
     } catch (err) {

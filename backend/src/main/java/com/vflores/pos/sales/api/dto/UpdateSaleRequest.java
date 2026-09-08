@@ -17,8 +17,6 @@ public record UpdateSaleRequest(
         @NotEmpty
         List<@Valid SaleItemRequest> items,
 
-        Sale.SaleStatus status,
-
         String comments
 ) {
 }

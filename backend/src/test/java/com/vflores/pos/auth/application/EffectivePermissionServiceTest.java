@@ -327,6 +327,19 @@ class EffectivePermissionServiceTest {
     }
 
     @Test
+    void denyUserAssignPermissionRemovesItFromEffectivePermissions() {
+        Permission userAssignPermission = permission("USER_ASSIGN_PERMISSION");
+        User user = userWithRole("CONSULTA", permission("SALE_READ"), userAssignPermission);
+        when(overrideRepository.findAllByUserId(user.getId())).thenReturn(List.of(
+                override(user, userAssignPermission, PermissionOverrideEffect.DENY)
+        ));
+
+        assertThat(service.resolve(user).effective())
+                .contains("SALE_READ")
+                .doesNotContain("USER_ASSIGN_PERMISSION");
+    }
+
+    @Test
     void userAssignPermissionAllowWorksWithoutInheritedWritePermission() {
         assertAllowAddsPermission("USER_READ", "USER_ASSIGN_PERMISSION");
     }

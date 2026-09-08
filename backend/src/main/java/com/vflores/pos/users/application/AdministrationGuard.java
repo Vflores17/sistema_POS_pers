@@ -8,7 +8,10 @@ import com.vflores.pos.users.domain.model.User;
 import com.vflores.pos.users.domain.model.UserStatus;
 import com.vflores.pos.users.domain.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+
+import static com.vflores.pos.shared.application.AuthenticatedUserSupport.getCurrentUserId;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +23,8 @@ import java.util.Set;
 public class AdministrationGuard {
 
     private static final String ADMIN_ROLE = "ADMIN";
+    private static final String ADMIN_MEMBERSHIP_DENIED_MESSAGE =
+            "Only an active administrator may change the ADMIN role";
     private static final Set<String> ESSENTIAL_ADMIN_PERMISSIONS = Set.of(
             "USER_READ", "USER_CREATE", "USER_UPDATE", "USER_DELETE",
             "USER_ASSIGN_ROLE", "USER_ASSIGN_PERMISSION",
@@ -47,6 +52,27 @@ public class AdministrationGuard {
         if (isActiveAdmin(user, adminRole)) {
             requireAnotherActiveAdmin(adminRole);
         }
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void requireAdminActorForAdminMembershipChange(Set<Role> currentRoles, Set<Role> newRoles) {
+        Role adminRole = lockAdminRole();
+        boolean currentlyHasAdmin = currentRoles.stream()
+                .anyMatch(role -> role.getId().equals(adminRole.getId()));
+        boolean willHaveAdmin = newRoles.stream()
+                .anyMatch(role -> role.getId().equals(adminRole.getId()));
+        if (currentlyHasAdmin == willHaveAdmin) {
+            return;
+        }
+        requireActiveAdminActor(adminRole);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean actorIsActiveAdmin() {
+        User actor = userRepository.findById(getCurrentUserId())
+                .orElseThrow(() -> new AccessDeniedException(ADMIN_MEMBERSHIP_DENIED_MESSAGE));
+        return actor.getStatus() == UserStatus.ACTIVE
+                && actor.getRoles().stream().anyMatch(role -> role.isActive() && isAdminRole(role));
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -85,6 +111,14 @@ public class AdministrationGuard {
     private Role lockAdminRole() {
         return roleRepository.findByNameForUpdate(ADMIN_ROLE)
                 .orElseThrow(() -> new ConflictException("An active ADMIN role is required"));
+    }
+
+    private void requireActiveAdminActor(Role adminRole) {
+        User actor = userRepository.findById(getCurrentUserId())
+                .orElseThrow(() -> new AccessDeniedException(ADMIN_MEMBERSHIP_DENIED_MESSAGE));
+        if (!isActiveAdmin(actor, adminRole)) {
+            throw new AccessDeniedException(ADMIN_MEMBERSHIP_DENIED_MESSAGE);
+        }
     }
 
     private boolean isActiveAdmin(User user, Role adminRole) {

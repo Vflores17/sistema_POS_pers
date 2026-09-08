@@ -1,8 +1,9 @@
 import type { ReactElement } from "react";
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import styles from "./Dashboard.module.css";
 import { usePermissions } from "../auth/PermissionContext";
+import { performLogout } from "../api/http";
 import SkeletonBlock from "../components/SkeletonBlock";
 
 type ModuleIcon = "sales" | "routes" | "products" | "clients" | "users";
@@ -46,12 +47,12 @@ export default function Dashboard(): ReactElement {
   const navigate = useNavigate();
   const { hasPermission, clearSession, loading, currentUser } = usePermissions();
 
-  function logout(): void {
-    localStorage.removeItem("token");
-    localStorage.removeItem("refreshToken");
-    clearSession();
-    window.location.href = "/login";
-  }
+  const handleLogout = useCallback((): void => {
+    void performLogout().then(() => {
+      clearSession();
+      window.location.href = "/login";
+    });
+  }, [clearSession]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent): void {
@@ -77,15 +78,12 @@ export default function Dashboard(): ReactElement {
       }
       if (e.altKey && e.key.toLowerCase() === "s") {
         e.preventDefault();
-        localStorage.removeItem("token");
-        localStorage.removeItem("refreshToken");
-        clearSession();
-        window.location.href = "/login";
+        handleLogout();
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [navigate, hasPermission, clearSession]);
+  }, [navigate, hasPermission, handleLogout]);
 
   if (loading) {
     return (
@@ -144,7 +142,7 @@ export default function Dashboard(): ReactElement {
               <span>Sesión activa</span>
               <strong>{currentUser?.fullName || currentUser?.username}</strong>
             </div>
-            <button className={styles.logoutButton} type="button" onClick={logout} title="Cerrar sesión (Alt+S)">
+            <button className={styles.logoutButton} type="button" onClick={handleLogout} title="Cerrar sesión (Alt+S)">
               <LineIcon name="logout" />
               <span>Salir</span>
             </button>

@@ -65,6 +65,7 @@ public class UserService {
     public UserResponse create(CreateUserRequest request) {
         validateUniqueness(request.username(), request.email(), null);
         Set<Role> roles = fetchRolesOrThrow(request.roleIds());
+        administrationGuard.requireAdminActorForAdminMembershipChange(Set.of(), roles);
 
         User user = User.builder()
                 .username(request.username().trim())
@@ -85,6 +86,7 @@ public class UserService {
 
         validateUniqueness(user.getUsername(), request.email(), user.getId());
         Set<Role> roles = fetchRolesOrThrow(request.roleIds());
+        administrationGuard.requireAdminActorForAdminMembershipChange(user.getRoles(), roles);
         administrationGuard.requireAdministrationAfterUserChange(user, request.status(), roles);
 
         user.setEmail(request.email().trim().toLowerCase());
@@ -109,6 +111,7 @@ public class UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
 
         Set<Role> roles = fetchRolesOrThrow(roleIds);
+        administrationGuard.requireAdminActorForAdminMembershipChange(user.getRoles(), roles);
         administrationGuard.requireAdministrationAfterUserChange(user, user.getStatus(), roles);
         user.setRoles(roles);
         return toResponse(userRepository.save(user));

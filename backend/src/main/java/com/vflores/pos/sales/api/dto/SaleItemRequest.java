@@ -13,6 +13,7 @@ public record SaleItemRequest(
         @DecimalMin(value = "0.001", message = "quantity must be > 0")
         BigDecimal quantity,
 
+        @DecimalMin(value = "0.01", message = "price must be greater than 0")
         BigDecimal price
 ) {
 }

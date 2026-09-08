@@ -107,12 +107,15 @@ const EMPTY_FORM: SaleFormDraft = {
   comments: "",
 };
 
+const PENDING_ROUTE_DRIVER_KEY = "pending_route_sale_driver_id";
+
 export default function RouteSales(): ReactElement {
   const { hasPermission, hasAllPermissions } = usePermissions();
   const canCreate = hasPermission("ROUTE_CREATE");
   const canUpdate = hasPermission("ROUTE_UPDATE");
   const canDelete = hasPermission("ROUTE_DELETE");
   const canCancel = hasPermission("ROUTE_CANCEL");
+  const canEditPrice = hasPermission("ROUTE_PRICE_OVERRIDE");
   const canReadProducts = hasPermission("PRODUCT_READ");
   const canReadPrices = hasPermission("PRICE_READ");
   const canCreateProduct = hasAllPermissions("PRODUCT_CREATE", "PRICE_CREATE");
@@ -157,6 +160,9 @@ export default function RouteSales(): ReactElement {
   const [driverNameDraft, setDriverNameDraft] = useState<string>("");
   const [driverStatusDraft, setDriverStatusDraft] =
     useState<DriverStatus>("ACTIVE");
+  const [showSelectDriverModal, setShowSelectDriverModal] =
+    useState<boolean>(false);
+  const [newSaleDriverId, setNewSaleDriverId] = useState<string>("");
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
@@ -487,7 +493,7 @@ export default function RouteSales(): ReactElement {
     },
     history: {
       enabled: !isFormScreen,
-      blocked: modal.show,
+      blocked: modal.show || showSelectDriverModal,
       selectedRowId,
       rows: sortedAndFilteredSales,
       canCreate: canCreate && caja.abierta,
@@ -502,7 +508,7 @@ export default function RouteSales(): ReactElement {
         selectedSale?.status === "PENDING",
       canOpenCashRegister: canOperateCaja && !caja.abierta,
       canCloseCashRegister: canOperateCaja && caja.abierta,
-      onCreate: () => navigate("/route-sales/new"),
+      onCreate: () => openCreateRouteSale(),
       onOpenModify: onAbrirModificar,
       onView: () => navigate(`/route-sales/${selectedRowId}/edit`),
       onPrint: printSale,
@@ -677,10 +683,28 @@ export default function RouteSales(): ReactElement {
   }
 
   useEscapeShortcut(showDriversModal, () => setShowDriversModal(false));
+  useEscapeShortcut(showSelectDriverModal, () =>
+    setShowSelectDriverModal(false),
+  );
 
   async function refreshDrivers(): Promise<void> {
     const data = await listDrivers();
     setDrivers(data);
+  }
+
+  function openCreateRouteSale(): void {
+    setNewSaleDriverId("");
+    if (drivers.length > 0) {
+      setShowSelectDriverModal(true);
+      return;
+    }
+    navigate("/route-sales/new");
+  }
+
+  function onConfirmSelectDriver(): void {
+    setShowSelectDriverModal(false);
+    sessionStorage.setItem(PENDING_ROUTE_DRIVER_KEY, newSaleDriverId);
+    navigate("/route-sales/new");
   }
 
   async function onCreateDriver(): Promise<void> {
@@ -770,7 +794,20 @@ export default function RouteSales(): ReactElement {
         } else {
           const next = await getNextRouteSaleInvoiceNumber();
           setInvoiceNumber(next);
-          setSaleDraft(EMPTY_FORM);
+          let pendingDriverId = "";
+          try {
+            pendingDriverId =
+              sessionStorage.getItem(PENDING_ROUTE_DRIVER_KEY) ?? "";
+            if (pendingDriverId) {
+              sessionStorage.removeItem(PENDING_ROUTE_DRIVER_KEY);
+            }
+          } catch {
+            pendingDriverId = "";
+          }
+          setSaleDraft({
+            ...EMPTY_FORM,
+            driverId: pendingDriverId,
+          });
           setClientSearch("");
           setSelectedRowId("");
           setLineSearch({});
@@ -1012,7 +1049,6 @@ export default function RouteSales(): ReactElement {
           price: line.unitPrice !== "" ? Number(line.unitPrice) : undefined,
         })),
         comments: saleDraft.comments,
-        status: calculatedStatus,
       };
 
       const saved =
@@ -1184,13 +1220,24 @@ export default function RouteSales(): ReactElement {
                       const options = filteredClientOptions;
                       if (e.key === "ArrowDown") {
                         e.preventDefault();
-                        setClientDropdownIndex((prev) =>
-                          Math.min(prev + 1, options.length - 1),
+                        const nextIndex = Math.min(
+                          clientDropdownIndex + 1,
+                          options.length - 1,
+                        );
+                        setClientDropdownIndex(nextIndex);
+                        scrollClientOptionIntoView(
+                          styles.clientDropdown,
+                          nextIndex,
                         );
                       }
                       if (e.key === "ArrowUp") {
                         e.preventDefault();
-                        setClientDropdownIndex((prev) => Math.max(prev - 1, 0));
+                        const nextIndex = Math.max(clientDropdownIndex - 1, 0);
+                        setClientDropdownIndex(nextIndex);
+                        scrollClientOptionIntoView(
+                          styles.clientDropdown,
+                          nextIndex,
+                        );
                       }
                       if (e.key === "Enter" && clientDropdownIndex >= 0) {
                         e.preventDefault();
@@ -1219,6 +1266,7 @@ export default function RouteSales(): ReactElement {
                       {filteredClientOptions.map((client, index) => (
                         <div
                           key={client.id}
+                          data-index={index}
                           className={styles.clientOption}
                           style={
                             index === clientDropdownIndex
@@ -1610,7 +1658,7 @@ export default function RouteSales(): ReactElement {
                                 focusCell(line.id, "quantity");
                               }
                             }}
-                            style={{ width: "180px" }}
+                            style={{ width: "200px" }}
                           />
                           {activeLineId === line.id && (
                             <div
@@ -1724,7 +1772,7 @@ export default function RouteSales(): ReactElement {
                         </td>
                         <td>
                           <input
-                            readOnly={isViewScreen}
+                            readOnly={isViewScreen || !canEditPrice}
                             ref={(el) => {
                               cellRefs.current[`${line.id}-price`] = el;
                             }}
@@ -2321,7 +2369,7 @@ export default function RouteSales(): ReactElement {
           hasSelection={Boolean(selectedRowId)}
           selectedStatus={selectedSale?.status}
           styles={styles}
-          onCreate={() => navigate("/route-sales/new")}
+          onCreate={() => openCreateRouteSale()}
           onModify={onAbrirModificar}
           onView={() =>
             selectedRowId && navigate(`/route-sales/${selectedRowId}/view`)
@@ -2357,6 +2405,60 @@ export default function RouteSales(): ReactElement {
             cancelLabel={modal.cancelLabel}
             danger={modal.danger}
           />
+        )}
+        {showSelectDriverModal && (
+          <div className={styles.modalBackdrop}>
+            <div className={styles.modal}>
+              <header className={styles.modalHeader}>
+                <h3>Seleccionar chofer</h3>
+                <button
+                  className={styles.button}
+                  type="button"
+                  onClick={() => setShowSelectDriverModal(false)}
+                >
+                  Cancelar <kbd>Esc</kbd>
+                </button>
+              </header>
+              <div className={styles.field}>
+                <label>Chofer</label>
+                <select
+                  value={newSaleDriverId}
+                  autoFocus
+                  onChange={(e) => setNewSaleDriverId(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newSaleDriverId) {
+                      e.preventDefault();
+                      onConfirmSelectDriver();
+                    }
+                  }}
+                >
+                  <option value="">Seleccionar chofer</option>
+                  {drivers.map((driver) => (
+                    <option key={driver.id} value={driver.id}>
+                      {driver.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <button
+                  className={styles.primaryButton}
+                  type="button"
+                  disabled={!newSaleDriverId}
+                  onClick={onConfirmSelectDriver}
+                >
+                  Continuar
+                </button>
+                <button
+                  className={styles.button}
+                  type="button"
+                  onClick={() => setShowSelectDriverModal(false)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
         )}
         {showAbrirCajaModal && (
           <div className={styles.modalBackdrop}>
@@ -2666,6 +2768,27 @@ export default function RouteSales(): ReactElement {
       </section>
     </div>
   );
+}
+
+function scrollClientOptionIntoView(
+  containerClass: string,
+  index: number,
+): void {
+  const container = document.querySelector<HTMLElement>(
+    `.${containerClass}`,
+  );
+  if (!container) return;
+  const option = container.querySelector<HTMLElement>(
+    `[data-index="${index}"]`,
+  );
+  if (!option) return;
+  const containerRect = container.getBoundingClientRect();
+  const optionRect = option.getBoundingClientRect();
+  if (optionRect.top < containerRect.top) {
+    container.scrollTop += optionRect.top - containerRect.top;
+  } else if (optionRect.bottom > containerRect.bottom) {
+    container.scrollTop += optionRect.bottom - containerRect.bottom;
+  }
 }
 
 function mapStatus(status: SaleStatus): string {

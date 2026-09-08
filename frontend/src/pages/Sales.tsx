@@ -103,6 +103,7 @@ export default function Sales(): ReactElement {
   const canUpdate = hasPermission("SALE_UPDATE");
   const canDelete = hasPermission("SALE_DELETE");
   const canCancel = hasPermission("SALE_CANCEL");
+  const canEditPrice = hasPermission("SALE_PRICE_OVERRIDE");
   const canReadProducts = hasPermission("PRODUCT_READ");
   const canReadPrices = hasPermission("PRICE_READ");
   const canCreateProduct = hasAllPermissions("PRODUCT_CREATE", "PRICE_CREATE");
@@ -924,7 +925,6 @@ export default function Sales(): ReactElement {
           quantity: line.quantity,
           price: line.unitPrice !== "" ? Number(line.unitPrice) : undefined,
         })),
-        status: calculatedStatus,
         comments: saleDraft.comments,
       };
       const saved =
@@ -1183,22 +1183,24 @@ export default function Sales(): ReactElement {
                       const options = filteredClientOptions;
                       if (e.key === "ArrowDown") {
                         e.preventDefault();
-                        setClientDropdownIndex((prev) =>
-                          Math.min(prev + 1, options.length - 1),
+                        const nextIndex = Math.min(
+                          clientDropdownIndex + 1,
+                          options.length - 1,
                         );
-                        setTimeout(() => {
-                          const dropdown = document.querySelector(
-                            `.${styles.clientDropdown}`,
-                          );
-                          const selected = dropdown?.querySelector(
-                            `[data-index="${clientDropdownIndex + 1}"]`,
-                          ) as HTMLElement;
-                          selected?.scrollIntoView({ block: "nearest" });
-                        }, 0);
+                        setClientDropdownIndex(nextIndex);
+                        scrollClientOptionIntoView(
+                          styles.clientDropdown,
+                          nextIndex,
+                        );
                       }
                       if (e.key === "ArrowUp") {
                         e.preventDefault();
-                        setClientDropdownIndex((prev) => Math.max(prev - 1, 0));
+                        const nextIndex = Math.max(clientDropdownIndex - 1, 0);
+                        setClientDropdownIndex(nextIndex);
+                        scrollClientOptionIntoView(
+                          styles.clientDropdown,
+                          nextIndex,
+                        );
                       }
                       if (e.key === "Enter" && clientDropdownIndex >= 0) {
                         e.preventDefault();
@@ -1611,7 +1613,7 @@ export default function Sales(): ReactElement {
                                 focusCell(line.id, "quantity");
                               }
                             }}
-                            style={{ width: "180px" }}
+                            style={{ width: "200px" }}
                           />
                           {activeLineId === line.id && (
                             <div
@@ -1726,7 +1728,7 @@ export default function Sales(): ReactElement {
                         </td>
                         <td>
                           <input
-                            readOnly={isViewScreen}
+                            readOnly={isViewScreen || !canEditPrice}
                             ref={(el) => {
                               cellRefs.current[`${line.id}-price`] = el;
                             }}
@@ -2744,6 +2746,27 @@ export default function Sales(): ReactElement {
       phone: whatsappModal.telefono,
       message: whatsappModal.mensaje,
     });
+  }
+}
+
+function scrollClientOptionIntoView(
+  containerClass: string,
+  index: number,
+): void {
+  const container = document.querySelector<HTMLElement>(
+    `.${containerClass}`,
+  );
+  if (!container) return;
+  const option = container.querySelector<HTMLElement>(
+    `[data-index="${index}"]`,
+  );
+  if (!option) return;
+  const containerRect = container.getBoundingClientRect();
+  const optionRect = option.getBoundingClientRect();
+  if (optionRect.top < containerRect.top) {
+    container.scrollTop += optionRect.top - containerRect.top;
+  } else if (optionRect.bottom > containerRect.bottom) {
+    container.scrollTop += optionRect.bottom - containerRect.bottom;
   }
 }
 

@@ -15,7 +15,6 @@ export interface CreateSalePayload {
   clientId: string;
   paymentMethod: PaymentMethod;
   items: SaleItemPayload[];
-  status?: string;
   comments?: string;
 }
 
