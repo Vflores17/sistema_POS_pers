@@ -14,7 +14,6 @@ import com.vflores.pos.routesales.api.dto.CreateRouteSaleRequest;
 import com.vflores.pos.routesales.api.dto.RouteSaleDetailResponse;
 import com.vflores.pos.routesales.api.dto.RouteSaleItemRequest;
 import com.vflores.pos.routesales.api.dto.RouteSalePaymentResponse;
-import com.vflores.pos.routesales.api.dto.RouteSalePaymentMovementResponse;
 import com.vflores.pos.routesales.api.dto.RouteSaleResponse;
 import com.vflores.pos.routesales.api.dto.UpdateRouteSaleRequest;
 import com.vflores.pos.routesales.domain.model.RouteSale;
@@ -30,7 +29,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -47,7 +45,6 @@ import static com.vflores.pos.shared.application.InventoryAdjustmentSupport.aggr
 import static com.vflores.pos.shared.application.InventoryAdjustmentSupport.applyStockDelta;
 import static com.vflores.pos.shared.application.InventoryAdjustmentSupport.restoreStockFromDetails;
 import static com.vflores.pos.shared.application.PaymentValidationSupport.requirePositiveAmount;
-import static com.vflores.pos.shared.application.PaymentValidationSupport.requireValidPeriod;
 
 @Service
 @RequiredArgsConstructor
@@ -283,24 +280,6 @@ public class RouteSaleService {
 
         RouteSale saved = routeSaleRepository.saveAndFlush(routeSale);
         return toResponse(saved);
-    }
-
-    @Transactional(readOnly = true)
-    public List<RouteSalePaymentMovementResponse> findPaymentMovements(OffsetDateTime from, OffsetDateTime to) {
-        requireValidPeriod(from, to);
-        return routeSalePaymentRepository
-                .findByCreatedAtGreaterThanEqualAndCreatedAtLessThanEqualOrderByCreatedAtAsc(from, to)
-                .stream()
-                .map(payment -> new RouteSalePaymentMovementResponse(
-                        payment.getId(),
-                        payment.getRouteSale().getId(),
-                        payment.getRouteSale().getInvoiceNumber(),
-                        payment.getRouteSale().getClientId(),
-                        payment.getRouteSale().getCreatedAt(),
-                        payment.getMethod(),
-                        payment.getAmount(),
-                        payment.getCreatedAt()))
-                .toList();
     }
 
     @Transactional(readOnly = true)

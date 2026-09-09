@@ -63,8 +63,8 @@ interface HistoryShortcutOptions<T extends ShortcutLine> {
   canPrint: boolean;
   canDelete: () => boolean;
   canPay: () => boolean;
-  canOpenCashRegister: boolean;
-  canCloseCashRegister: boolean;
+  canOpenCashRegister?: boolean;
+  canCloseCashRegister?: boolean;
   onCreate: () => void;
   onOpenModify: () => void;
   onView: () => void;
@@ -72,11 +72,11 @@ interface HistoryShortcutOptions<T extends ShortcutLine> {
   onDelete: () => void;
   onPay: () => void;
   onExit: () => void;
-  onOpenCashRegister: () => void;
-  onCloseCashRegister: () => void;
+  onOpenCashRegister?: () => void;
+  onCloseCashRegister?: () => void;
   onSelectRow: (rowId: string) => void;
   registration: {
-    cashRegister: unknown;
+    cashRegister?: unknown;
     navigate: unknown;
   };
 }
@@ -306,11 +306,11 @@ export function useSaleKeyboardShortcuts<T extends ShortcutLine>({
       }
       if (event.altKey && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        if (history.canOpenCashRegister) history.onOpenCashRegister();
+        if (history.canOpenCashRegister) history.onOpenCashRegister?.();
       }
       if (event.altKey && event.key.toLowerCase() === "x") {
         event.preventDefault();
-        if (history.canCloseCashRegister) history.onCloseCashRegister();
+        if (history.canCloseCashRegister) history.onCloseCashRegister?.();
       }
       if (event.key === "ArrowDown") {
         event.preventDefault();

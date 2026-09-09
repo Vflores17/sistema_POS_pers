@@ -25,10 +25,7 @@ export interface SalesCashRegisterState extends BaseCashRegisterState {
   gastos: CashRegisterExpense[];
 }
 
-export type RouteCashRegisterState = BaseCashRegisterState;
-
 const SALES_STORAGE_KEY = "caja_state";
-const ROUTE_STORAGE_KEY = "ruta_caja_state";
 
 function closedSalesCashRegister(): SalesCashRegisterState {
   return {
@@ -39,17 +36,6 @@ function closedSalesCashRegister(): SalesCashRegisterState {
     facturaIds: [],
     pagos: [],
     gastos: [],
-  };
-}
-
-function closedRouteCashRegister(): RouteCashRegisterState {
-  return {
-    abierta: false,
-    montoInicial: 0,
-    horaInicio: "",
-    openedAt: "",
-    facturaIds: [],
-    pagos: [],
   };
 }
 
@@ -69,23 +55,6 @@ function loadSalesCashRegister(): SalesCashRegisterState {
     // Mantiene el comportamiento legacy: una lectura inválida inicia la caja cerrada.
   }
   return closedSalesCashRegister();
-}
-
-function loadRouteCashRegister(): RouteCashRegisterState {
-  try {
-    const stored = localStorage.getItem(ROUTE_STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored) as RouteCashRegisterState;
-      return {
-        ...parsed,
-        pagos: parsed.pagos ?? [],
-        openedAt: parsed.openedAt ?? "",
-      };
-    }
-  } catch {
-    // Mantiene el comportamiento legacy: una lectura inválida inicia la caja cerrada.
-  }
-  return closedRouteCashRegister();
 }
 
 function useStoredCashRegister<T>(
@@ -145,34 +114,5 @@ export function useSalesCashRegister() {
     closeCashRegister,
     addExpense,
     removeExpense,
-  };
-}
-
-export function useRouteCashRegister() {
-  const { cashRegister, persistCashRegister } = useStoredCashRegister(
-    ROUTE_STORAGE_KEY,
-    loadRouteCashRegister,
-  );
-
-  function openCashRegister(initialAmount: number): void {
-    persistCashRegister({
-      abierta: true,
-      montoInicial: initialAmount,
-      horaInicio: new Date().toLocaleString("es-CR"),
-      openedAt: new Date().toISOString(),
-      facturaIds: [],
-      pagos: [],
-    });
-  }
-
-  function closeCashRegister(): void {
-    persistCashRegister(closedRouteCashRegister());
-  }
-
-  return {
-    cashRegister,
-    persistCashRegister,
-    openCashRegister,
-    closeCashRegister,
   };
 }

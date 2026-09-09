@@ -61,25 +61,9 @@ export interface CreateRouteSalePaymentPayload {
   amount: number;
 }
 
-export interface RouteSalePaymentMovement extends RouteSalePayment {
-  invoiceNumber: number;
-  clientId: string;
-  routeSaleCreatedAt: string;
-  createdAt: string;
-}
-
 export async function listRouteSales(): Promise<RouteSale[]> {
   const response = await fetchWithAuth(`${API_URL}/route-sales`, { method: "GET", headers: buildHeaders(false) });
   return parseApiResponse<RouteSale[]>(response, "No se pudieron cargar las rutas.");
-}
-
-export async function listRouteSalePaymentMovements(from: string, to: string): Promise<RouteSalePaymentMovement[]> {
-  const params = new URLSearchParams({ from, to });
-  const response = await fetchWithAuth(`${API_URL}/route-sales/payments?${params.toString()}`, {
-    method: "GET",
-    headers: buildHeaders(false),
-  });
-  return parseApiResponse<RouteSalePaymentMovement[]>(response, "No se pudieron cargar los movimientos de caja de rutas.");
 }
 
 export async function getRouteSaleById(id: string): Promise<RouteSale> {

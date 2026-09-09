@@ -9,12 +9,10 @@ import {
   getNextRouteSaleInvoiceNumber,
   getRouteSaleById,
   listRouteSales,
-  listRouteSalePaymentMovements,
   updateRouteSale,
   type RoutePaymentMethod as PaymentMethod,
   type RouteSale as Sale,
   type RouteSaleStatus as SaleStatus,
-  type RouteSalePaymentMovement,
   saveRouteSalePayments as savePayments,
   updateRouteSalePayments,
 } from "../api/route-sales";
@@ -28,7 +26,6 @@ import {
   type Product,
 } from "../api/products";
 import TicketPrint from "../components/TicketPrint";
-import CierreCajaPrint from "../components/CierreCajaPrint";
 import {
   createDriver,
   deleteDriver,
@@ -39,7 +36,7 @@ import {
 } from "../api/drivers";
 import { usePermissions } from "../auth/PermissionContext";
 import { isAdminAuthorizationCancelled } from "../api/admin-authorizations";
-import { isGloballyReportedError, notifyGlobalError } from "../api/errors";
+import { isGloballyReportedError } from "../api/errors";
 import ModuleLoadingSkeleton from "../components/ModuleLoadingSkeleton";
 import SaleHistoryFilters from "../components/SaleHistoryFilters";
 import SaleHistoryTable from "../components/SaleHistoryTable";
@@ -54,7 +51,6 @@ import {
   useSaleKeyboardShortcuts,
 } from "../hooks/useSaleKeyboardShortcuts";
 import { useSalePayments } from "../hooks/useSalePayments";
-import { useRouteCashRegister } from "../hooks/useCashRegister";
 import { generateRouteSaleWhatsappPdf } from "../utils/saleExportUtils";
 import {
   calculateLinesTotal,
@@ -123,17 +119,9 @@ export default function RouteSales(): ReactElement {
   const canReadDrivers = hasPermission("DRIVER_READ");
   const canCreateDriver = hasPermission("DRIVER_CREATE");
   const canDeleteDriver = hasPermission("DRIVER_DELETE");
-  const canOperateCaja = canCreate || canUpdate;
   const [showModificarModal, setShowModificarModal] = useState<boolean>(false);
   const [modificarInvoiceInput, setModificarInvoiceInput] =
     useState<string>("");
-  const {
-    cashRegister: caja,
-    openCashRegister,
-    closeCashRegister,
-  } = useRouteCashRegister();
-  const [showAbrirCajaModal, setShowAbrirCajaModal] = useState<boolean>(false);
-  const [montoInicialDraft, setMontoInicialDraft] = useState<string>("30000");
   const [modal, setModal] = useState<ModalState>({
     show: false,
     type: "success",
@@ -230,21 +218,6 @@ export default function RouteSales(): ReactElement {
     { type: string; price: number }[]
   >([]);
   const [saleToPrint, setSaleToPrint] = useState<Sale | null>(null);
-  const [cierreToPrint, setCierreToPrint] = useState<{
-    horaInicio: string;
-    horaCierre: string;
-    montoInicial: number;
-    cantidadFacturas: number;
-    cantidadAbonosAnteriores: number;
-    totalEfectivo: number;
-    totalSinpe: number;
-    totalTransferencia: number;
-    totalTarjeta: number;
-    totalGastos: number;
-    efectivoNeto: number;
-    total: number;
-    gastos: { descripcion: string; monto: number }[];
-  } | null>(null);
 
   const [dropdownPosition, setDropdownPosition] = useState<{
     top: number;
@@ -259,7 +232,6 @@ export default function RouteSales(): ReactElement {
   const { sortedAndFilteredSales } = historyFilters;
 
   function printSale(sale: Sale): void {
-    setCierreToPrint(null);
     setSaleToPrint(sale);
     window.setTimeout(() => {
       window.print();
@@ -291,22 +263,6 @@ export default function RouteSales(): ReactElement {
       state: { selectedId: sale.id },
     });
   }
-  function abrirCaja(): void {
-    if (!montoInicialDraft) {
-      setModal({
-        show: true,
-        type: "error",
-        title: "Error",
-        message: "Ingresa el monto inicial de efectivo.",
-        confirmLabel: "Aceptar",
-        onConfirm: closeModal,
-      });
-      return;
-    }
-    openCashRegister(Number(montoInicialDraft));
-    setMontoInicialDraft("");
-    setShowAbrirCajaModal(false);
-  }
 
   const [whatsappModal, setWhatsappModal] = useState<{
     show: boolean;
@@ -316,111 +272,6 @@ export default function RouteSales(): ReactElement {
   } | null>(null);
 
   const [showComments, setShowComments] = useState<boolean>(false);
-
-  async function cerrarCaja(): Promise<void> {
-    const openedAt =
-      caja.openedAt ||
-      (() => {
-        const legacyDate = new Date(caja.horaInicio);
-        return Number.isNaN(legacyDate.getTime())
-          ? ""
-          : legacyDate.toISOString();
-      })();
-    if (!openedAt) {
-      setModal({
-        show: true,
-        type: "error",
-        title: "No se puede cerrar la caja",
-        message:
-          "La apertura actual no tiene una fecha válida. Cierra manualmente esta caja local y vuelve a abrirla.",
-        confirmLabel: "Aceptar",
-        onConfirm: closeModal,
-      });
-      return;
-    }
-    const closedAt = new Date();
-    let movements: RouteSalePaymentMovement[];
-    try {
-      movements = await listRouteSalePaymentMovements(
-        openedAt,
-        closedAt.toISOString(),
-      );
-    } catch (cause) {
-      if (!isGloballyReportedError(cause))
-        notifyGlobalError(
-          readError(
-            cause,
-            "No se pudieron consultar los pagos del turno de rutas.",
-          ),
-        );
-      return;
-    }
-    const fromTime = new Date(openedAt).getTime();
-    const toTime = closedAt.getTime();
-    const facturasDeTurno = sales.filter((sale) => {
-      const createdAt = new Date(sale.createdAt).getTime();
-      return createdAt >= fromTime && createdAt <= toTime;
-    });
-    const totalByMethod = (method: PaymentMethod): number =>
-      movements
-        .filter((payment) => payment.method === method)
-        .reduce((sum, payment) => sum + Number(payment.amount), 0);
-    const totalEfectivo = totalByMethod("CASH");
-    const totalSinpe = totalByMethod("SINPE");
-    const totalTransferencia = totalByMethod("TRANSFER");
-    const totalTarjeta = totalByMethod("CARD");
-    const abonosAnteriores = movements.filter(
-      (payment) => new Date(payment.routeSaleCreatedAt).getTime() < fromTime,
-    ).length;
-    const mensaje = `
-🕐 Inicio: ${caja.horaInicio}
-💵 Monto inicial: ₡${caja.montoInicial.toLocaleString("es-CR")}
-
-📋 Facturas del turno: ${facturasDeTurno.length}
-📥 Abonos a facturas anteriores: ${abonosAnteriores}
-
-💰 Efectivo: ₡${totalEfectivo.toLocaleString("es-CR")}
-📱 SINPE: ₡${totalSinpe.toLocaleString("es-CR")}
-🏦 Transferencia: ₡${totalTransferencia.toLocaleString("es-CR")}
-💳 Tarjeta: ₡${totalTarjeta.toLocaleString("es-CR")}
-
-⚠️ Recuerde vaciar la memoria del datáfono.
-  `.trim();
-
-    setModal({
-      show: true,
-      type: "success",
-      title: "Cierre de Caja",
-      message: mensaje,
-      confirmLabel: "Imprimir y Cerrar",
-      cancelLabel: "Cancelar",
-      onConfirm: () => {
-        closeModal();
-        setSaleToPrint(null);
-        setCierreToPrint({
-          horaInicio: caja.horaInicio,
-          horaCierre: closedAt.toLocaleString("es-CR"),
-          montoInicial: caja.montoInicial,
-          cantidadFacturas: facturasDeTurno.length,
-          cantidadAbonosAnteriores: abonosAnteriores,
-          totalEfectivo,
-          totalSinpe,
-          totalTransferencia,
-          totalTarjeta,
-          totalGastos: 0,
-          efectivoNeto: totalEfectivo,
-          total: totalEfectivo + totalSinpe + totalTransferencia + totalTarjeta,
-          gastos: [],
-        });
-        window.setTimeout(() => {
-          window.print();
-          setCierreToPrint(null);
-          closeCashRegister();
-        }, 300);
-      },
-      onCancel: closeModal,
-    });
-  }
 
   useSaleKeyboardShortcuts({
     whatsapp: {
@@ -490,9 +341,7 @@ export default function RouteSales(): ReactElement {
           navigate("/route-sales", { state: { selectedId: id } });
         }
       },
-      onOpenModify: () => {
-        if (caja.abierta) onAbrirModificar();
-      },
+      onOpenModify: onAbrirModificar,
       onSelectRow: setSelectedRowId,
       onFocusCell: focusCell,
       onCloseViewedProduct: () => {
@@ -522,18 +371,15 @@ export default function RouteSales(): ReactElement {
       blocked: modal.show || showSelectDriverModal,
       selectedRowId,
       rows: sortedAndFilteredSales,
-      canCreate: canCreate && caja.abierta,
-      canOpenModify: caja.abierta,
-      canView: caja.abierta && Boolean(selectedRowId),
-      canPrint: caja.abierta && Boolean(selectedRowId),
-      canDelete: () => canDelete && caja.abierta && Boolean(selectedRowId),
+      canCreate: canCreate,
+      canOpenModify: canUpdate,
+      canView: Boolean(selectedRowId),
+      canPrint: Boolean(selectedRowId),
+      canDelete: () => canDelete && Boolean(selectedRowId),
       canPay: () =>
         canUpdate &&
-        caja.abierta &&
         Boolean(selectedRowId) &&
         selectedSale?.status === "PENDING",
-      canOpenCashRegister: canOperateCaja && !caja.abierta,
-      canCloseCashRegister: canOperateCaja && caja.abierta,
       onCreate: () => openCreateRouteSale(),
       onOpenModify: onAbrirModificar,
       onView: () => navigate(`/route-sales/${selectedRowId}/edit`),
@@ -541,10 +387,8 @@ export default function RouteSales(): ReactElement {
       onDelete: () => void onDeleteSale(selectedRowId),
       onPay: () => navigate(`/route-sales/${selectedRowId}/edit`),
       onExit: () => navigate("/dashboard"),
-      onOpenCashRegister: () => setShowAbrirCajaModal(true),
-      onCloseCashRegister: cerrarCaja,
       onSelectRow: setSelectedRowId,
-      registration: { cashRegister: caja, navigate },
+      registration: { navigate },
     },
   });
 
@@ -2520,90 +2364,6 @@ export default function RouteSales(): ReactElement {
             </div>
           </div>
         )}
-        {showAbrirCajaModal && (
-          <div className={styles.modalBackdrop}>
-            <div className={styles.modal}>
-              <header className={styles.modalHeader}>
-                <h3>Iniciar Caja</h3>
-                <button
-                  className={styles.button}
-                  type="button"
-                  onClick={() => setShowAbrirCajaModal(false)}
-                >
-                  Cerrar
-                </button>
-              </header>
-              <div className={styles.field}>
-                <label>Monto inicial de efectivo</label>
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "0.5rem",
-                    alignItems: "center",
-                  }}
-                >
-                  <input
-                    type="number"
-                    min="0"
-                    autoFocus
-                    value={montoInicialDraft}
-                    onChange={(e) => setMontoInicialDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") abrirCaja();
-                      if (e.key === "Escape") setShowAbrirCajaModal(false);
-                    }}
-                    placeholder="₡0"
-                    style={{ flex: 1 }}
-                  />
-                  <button
-                    className={styles.button}
-                    type="button"
-                    onClick={() => setMontoInicialDraft("30000")}
-                    style={{ fontSize: "0.75rem", padding: "0.3rem 0.6rem" }}
-                  >
-                    Restablecer
-                  </button>
-                </div>
-                <span style={{ fontSize: "0.78rem", color: "#6b7280" }}>
-                  Por defecto: ₡30,000
-                </span>
-              </div>
-              <p
-                style={{
-                  color: "#b45309",
-                  fontSize: "0.9rem",
-                  margin: "0.5rem 0",
-                }}
-              >
-                ⚠️ Recuerde vaciar la memoria del datáfono antes de iniciar.
-              </p>
-              {canCreateDriver && (
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "0.5rem",
-                    marginTop: "0.5rem",
-                  }}
-                >
-                  <button
-                    className={styles.primaryButton}
-                    type="button"
-                    onClick={abrirCaja}
-                  >
-                    Iniciar Caja
-                  </button>
-                  <button
-                    className={styles.button}
-                    type="button"
-                    onClick={() => setShowAbrirCajaModal(false)}
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
         {showDriversModal && (
           <div className={styles.modalBackdrop}>
             <div className={styles.modal}>
@@ -2700,16 +2460,13 @@ export default function RouteSales(): ReactElement {
             </div>
           </div>
         )}
-        {saleToPrint && !cierreToPrint && (
+        {saleToPrint && (
           <TicketPrint
             sale={saleToPrint}
             client={clientsById.get(saleToPrint.clientId)}
             productsById={productsById}
             routeTicket
           />
-        )}
-        {!saleToPrint && cierreToPrint && (
-          <CierreCajaPrint data={cierreToPrint} />
         )}
         {whatsappModal?.show && (
           <div className={styles.modalBackdrop}>
