@@ -55,6 +55,7 @@ public class PermissionService {
 
     @Transactional
     public PermissionResponse create(CreatePermissionRequest request) {
+        administrationGuard.requireActiveAdminActor();
         String code = normalizeCode(request.code());
         if (permissionRepository.existsByCode(code)) {
             throw new ConflictException("Permission code already exists");
@@ -70,6 +71,7 @@ public class PermissionService {
 
     @Transactional
     public PermissionResponse update(UUID id, UpdatePermissionRequest request) {
+        administrationGuard.requireActiveAdminActor();
         Permission permission = permissionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Permission not found: " + id));
 
@@ -80,6 +82,7 @@ public class PermissionService {
 
     @Transactional
     public void delete(UUID id) {
+        administrationGuard.requireActiveAdminActor();
         Permission permission = permissionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Permission not found: " + id));
 

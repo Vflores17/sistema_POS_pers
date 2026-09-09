@@ -1,5 +1,6 @@
 package com.vflores.pos.users.application;
 
+import com.vflores.pos.auth.domain.repository.RefreshTokenRepository;
 import com.vflores.pos.roles.domain.model.Role;
 import com.vflores.pos.roles.domain.repository.RoleRepository;
 import com.vflores.pos.shared.exception.ConflictException;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -31,6 +33,7 @@ public class UserService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final AdministrationGuard administrationGuard;
+    private final RefreshTokenRepository refreshTokenRepository;
 
     @Transactional(readOnly = true)
     public Page<UserResponse> findAll(String search, UserStatus status, Pageable pageable) {
@@ -87,7 +90,9 @@ public class UserService {
         validateUniqueness(user.getUsername(), request.email(), user.getId());
         Set<Role> roles = fetchRolesOrThrow(request.roleIds());
         administrationGuard.requireAdminActorForAdminMembershipChange(user.getRoles(), roles);
+        administrationGuard.requireAdminActorForAdminLifecycleChange(user, roles, request.status(), request.email());
         administrationGuard.requireAdministrationAfterUserChange(user, request.status(), roles);
+        invalidateSessionsIfLifecycleChanged(user, roles, request.status());
 
         user.setEmail(request.email().trim().toLowerCase());
         user.setFullName(request.fullName().trim());
@@ -102,6 +107,7 @@ public class UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + id));
         administrationGuard.requireAdministrationAfterUserDeletion(user);
+        refreshTokenRepository.deleteByUserId(user.getId());
         userRepository.delete(user);
     }
 
@@ -113,6 +119,7 @@ public class UserService {
         Set<Role> roles = fetchRolesOrThrow(roleIds);
         administrationGuard.requireAdminActorForAdminMembershipChange(user.getRoles(), roles);
         administrationGuard.requireAdministrationAfterUserChange(user, user.getStatus(), roles);
+        invalidateSessionsIfLifecycleChanged(user, roles, user.getStatus());
         user.setRoles(roles);
         return toResponse(userRepository.save(user));
     }
@@ -123,6 +130,19 @@ public class UserService {
             throw new ResourceNotFoundException("One or more role IDs do not exist");
         }
         return roles;
+    }
+
+    private void invalidateSessionsIfLifecycleChanged(User user, Set<Role> newRoles, UserStatus newStatus) {
+        boolean lostActiveStatus = user.getStatus() == UserStatus.ACTIVE && newStatus != UserStatus.ACTIVE;
+        boolean lostAdminMembership = user.getRoles().stream().anyMatch(this::isAdminRole)
+                && newRoles.stream().noneMatch(this::isAdminRole);
+        if (lostActiveStatus || lostAdminMembership) {
+            refreshTokenRepository.revokeAllByUserId(user.getId());
+        }
+    }
+
+    private boolean isAdminRole(Role role) {
+        return "ADMIN".equals(role.getName() == null ? "" : role.getName().trim().toUpperCase(Locale.ROOT));
     }
 
     private void validateUniqueness(String username, String email, UUID currentUserId) {

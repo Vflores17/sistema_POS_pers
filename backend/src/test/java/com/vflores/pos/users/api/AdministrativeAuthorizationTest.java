@@ -26,6 +26,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -188,33 +189,38 @@ class AdministrativeAuthorizationTest {
 
     @Test
     @WithMockUser(authorities = "ROLE_CREATE")
-    void roleCreateAllowsPost() throws Exception {
+    void roleCreateByNonAdminIsForbiddenEvenWithAuthority() throws Exception {
+        when(roleService.create(any())).thenThrow(new AccessDeniedException("denied"));
         mockMvc.perform(post("/api/v1/roles").with(csrf())
-                .contentType("application/json").content(ROLE_BODY)).andExpect(status().isCreated());
+                .contentType("application/json").content(ROLE_BODY)).andExpect(status().isForbidden());
     }
 
     @Test
     @WithMockUser(authorities = "ROLE_UPDATE")
-    void roleUpdateAllowsPutButNotPermissionAssignment() throws Exception {
+    void roleUpdateByNonAdminIsForbiddenEvenWithAuthority() throws Exception {
+        when(roleService.update(any(), any())).thenThrow(new AccessDeniedException("denied"));
         mockMvc.perform(put("/api/v1/roles/{id}", ROLE_ID).with(csrf())
-                .contentType("application/json").content(UPDATE_ROLE_BODY)).andExpect(status().isOk());
+                .contentType("application/json").content(UPDATE_ROLE_BODY)).andExpect(status().isForbidden());
         mockMvc.perform(patch("/api/v1/roles/{id}/permissions", ROLE_ID).with(csrf()))
                 .andExpect(status().isForbidden());
     }
 
     @Test
     @WithMockUser(authorities = "ROLE_ASSIGN_PERMISSION")
-    void roleAssignPermissionAllowsDedicatedEndpoint() throws Exception {
+    void roleAssignPermissionByNonAdminIsForbiddenEvenWithAuthority() throws Exception {
+        when(roleService.assignPermissions(any(), any()))
+                .thenThrow(new AccessDeniedException("denied"));
         mockMvc.perform(patch("/api/v1/roles/{id}/permissions", ROLE_ID).with(csrf())
                 .contentType("application/json")
                 .content("{\"permissionIds\":[\"" + PERMISSION_ID + "\"]}"))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden());
     }
 
     @Test
     @WithMockUser(authorities = "ROLE_DELETE")
-    void roleDeleteAllowsDelete() throws Exception {
-        mockMvc.perform(delete("/api/v1/roles/{id}", ROLE_ID).with(csrf())).andExpect(status().isNoContent());
+    void roleDeleteByNonAdminIsForbiddenEvenWithAuthority() throws Exception {
+        doThrow(new AccessDeniedException("denied")).when(roleService).delete(any());
+        mockMvc.perform(delete("/api/v1/roles/{id}", ROLE_ID).with(csrf())).andExpect(status().isForbidden());
     }
 
     @Test
@@ -228,23 +234,26 @@ class AdministrativeAuthorizationTest {
 
     @Test
     @WithMockUser(authorities = "PERMISSION_CREATE")
-    void permissionCreateAllowsPost() throws Exception {
+    void permissionCreateByNonAdminIsForbiddenEvenWithAuthority() throws Exception {
+        when(permissionService.create(any())).thenThrow(new AccessDeniedException("denied"));
         mockMvc.perform(post("/api/v1/permissions").with(csrf())
-                .contentType("application/json").content(PERMISSION_BODY)).andExpect(status().isCreated());
+                .contentType("application/json").content(PERMISSION_BODY)).andExpect(status().isForbidden());
     }
 
     @Test
     @WithMockUser(authorities = "PERMISSION_UPDATE")
-    void permissionUpdateAllowsPut() throws Exception {
+    void permissionUpdateByNonAdminIsForbiddenEvenWithAuthority() throws Exception {
+        when(permissionService.update(any(), any())).thenThrow(new AccessDeniedException("denied"));
         mockMvc.perform(put("/api/v1/permissions/{id}", PERMISSION_ID).with(csrf())
-                .contentType("application/json").content(UPDATE_PERMISSION_BODY)).andExpect(status().isOk());
+                .contentType("application/json").content(UPDATE_PERMISSION_BODY)).andExpect(status().isForbidden());
     }
 
     @Test
     @WithMockUser(authorities = "PERMISSION_DELETE")
-    void permissionDeleteAllowsDelete() throws Exception {
+    void permissionDeleteByNonAdminIsForbiddenEvenWithAuthority() throws Exception {
+        doThrow(new AccessDeniedException("denied")).when(permissionService).delete(any());
         mockMvc.perform(delete("/api/v1/permissions/{id}", PERMISSION_ID).with(csrf()))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isForbidden());
     }
 
     @Test

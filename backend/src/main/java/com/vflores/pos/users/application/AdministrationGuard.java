@@ -25,6 +25,8 @@ public class AdministrationGuard {
     private static final String ADMIN_ROLE = "ADMIN";
     private static final String ADMIN_MEMBERSHIP_DENIED_MESSAGE =
             "Only an active administrator may change the ADMIN role";
+    private static final String ADMIN_LIFECYCLE_DENIED_MESSAGE =
+            "Only an active administrator may change the lifecycle of an ADMIN account";
     private static final Set<String> ESSENTIAL_ADMIN_PERMISSIONS = Set.of(
             "USER_READ", "USER_CREATE", "USER_UPDATE", "USER_DELETE",
             "USER_ASSIGN_ROLE", "USER_ASSIGN_PERMISSION",
@@ -76,6 +78,37 @@ public class AdministrationGuard {
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
+    public void requireActiveAdminActor() {
+        Role adminRole = lockAdminRole();
+        requireActiveAdminActor(adminRole);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void requireAdminActorForAdminLifecycleChange(
+            User user,
+            Set<Role> newRoles,
+            UserStatus newStatus,
+            String newEmail
+    ) {
+        Role adminRole = lockAdminRole();
+        boolean currentlyHasAdmin = hasAdminMembership(user.getRoles(), adminRole);
+        boolean willHaveAdmin = hasAdminMembership(newRoles, adminRole);
+
+        if (!currentlyHasAdmin && !willHaveAdmin) {
+            return;
+        }
+
+        boolean statusChanged = user.getStatus() != newStatus;
+        boolean membershipChanged = currentlyHasAdmin != willHaveAdmin;
+        boolean isSelfService = user.getId() != null && user.getId().equals(getCurrentUserId());
+        boolean identityChanged = newEmail != null && !newEmail.equalsIgnoreCase(user.getEmail());
+
+        if (statusChanged || membershipChanged || (identityChanged && !isSelfService)) {
+            requireActiveAdminActor(adminRole, ADMIN_LIFECYCLE_DENIED_MESSAGE);
+        }
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
     public void requireAdministrationAfterRoleUpdate(Role role, boolean newActive) {
         if (!isAdminRole(role) || newActive) {
             return;
@@ -114,11 +147,19 @@ public class AdministrationGuard {
     }
 
     private void requireActiveAdminActor(Role adminRole) {
+        requireActiveAdminActor(adminRole, ADMIN_MEMBERSHIP_DENIED_MESSAGE);
+    }
+
+    private void requireActiveAdminActor(Role adminRole, String deniedMessage) {
         User actor = userRepository.findById(getCurrentUserId())
-                .orElseThrow(() -> new AccessDeniedException(ADMIN_MEMBERSHIP_DENIED_MESSAGE));
+                .orElseThrow(() -> new AccessDeniedException(deniedMessage));
         if (!isActiveAdmin(actor, adminRole)) {
-            throw new AccessDeniedException(ADMIN_MEMBERSHIP_DENIED_MESSAGE);
+            throw new AccessDeniedException(deniedMessage);
         }
+    }
+
+    private boolean hasAdminMembership(Set<Role> roles, Role adminRole) {
+        return roles.stream().anyMatch(role -> role.getId().equals(adminRole.getId()));
     }
 
     private boolean isActiveAdmin(User user, Role adminRole) {

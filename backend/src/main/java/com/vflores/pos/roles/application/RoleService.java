@@ -58,6 +58,7 @@ public class RoleService {
 
     @Transactional
     public RoleResponse create(CreateRoleRequest request) {
+        administrationGuard.requireActiveAdminActor();
         String normalizedName = normalizeRoleName(request.name());
         if (roleRepository.existsByNameIgnoreCase(normalizedName)) {
             throw new ConflictException("Role name already exists");
@@ -73,6 +74,7 @@ public class RoleService {
 
     @Transactional
     public RoleResponse update(UUID id, UpdateRoleRequest request) {
+        administrationGuard.requireActiveAdminActor();
         Role role = roleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + id));
 
@@ -84,6 +86,7 @@ public class RoleService {
 
     @Transactional
     public void delete(UUID id) {
+        administrationGuard.requireActiveAdminActor();
         Role role = roleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + id));
 
@@ -95,6 +98,7 @@ public class RoleService {
 
     @Transactional
     public RoleResponse assignPermissions(UUID roleId, Set<UUID> permissionIds) {
+        administrationGuard.requireActiveAdminActor();
         Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + roleId));
 

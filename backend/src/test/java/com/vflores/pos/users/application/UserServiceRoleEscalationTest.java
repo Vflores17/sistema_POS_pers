@@ -1,6 +1,7 @@
 package com.vflores.pos.users.application;
 
 import com.vflores.pos.auth.infrastructure.security.AuthenticatedUser;
+import com.vflores.pos.auth.domain.repository.RefreshTokenRepository;
 import com.vflores.pos.roles.domain.model.Role;
 import com.vflores.pos.roles.domain.repository.RoleRepository;
 import com.vflores.pos.shared.exception.ConflictException;
@@ -46,6 +47,8 @@ class UserServiceRoleEscalationTest {
     private RoleRepository roleRepository;
     @Mock
     private PasswordEncoder passwordEncoder;
+    @Mock
+    private RefreshTokenRepository refreshTokenRepository;
 
     private AdministrationGuard guard;
     private UserService service;
@@ -58,7 +61,7 @@ class UserServiceRoleEscalationTest {
     @BeforeEach
     void setUp() {
         guard = new AdministrationGuard(userRepository, roleRepository);
-        service = new UserService(userRepository, roleRepository, passwordEncoder, guard);
+        service = new UserService(userRepository, roleRepository, passwordEncoder, guard, refreshTokenRepository);
         adminRole = Role.builder().id(ADMIN_ROLE_ID).name("ADMIN").active(true).build();
         otherRole = Role.builder().id(OTHER_ROLE_ID).name("SELLER").active(true).build();
         nonAdminActor = User.builder().id(ACTOR_ID).username("actor").email("actor@example.com")
