@@ -228,14 +228,31 @@
   font-size: 0.78rem;
 }
 
-.legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  padding: 0.55rem 0.7rem;
+.permissionTableHeader {
+  display: grid;
+
+  grid-template-columns:
+    minmax(200px, 1fr)
+    minmax(150px, 180px)
+    minmax(90px, 120px)
+    minmax(90px, 120px)
+    110px;
+
+  gap: 0.75rem;
+  align-items: center;
+
+  padding: 0.55rem 0.75rem;
   background: #f9fafb;
   color: #4b5563;
   font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.inheritedColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
 }
 
 .permissionGroups {
@@ -288,10 +305,11 @@
   display: grid;
 
   grid-template-columns:
-    minmax(220px, 1fr)
-    100px
-    minmax(220px, 240px)
-    100px;
+    minmax(200px, 1fr)
+    minmax(150px, 180px)
+    minmax(90px, 120px)
+    minmax(90px, 120px)
+    110px;
 
   gap: 0.75rem;
   align-items: center;
@@ -384,27 +402,13 @@
   color: #1d4ed8;
 }
 
-.tristate {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-
-  width: 100%;
-  min-width: 0;
-
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-
-  overflow: hidden;
-  position: static;
-}
-
 .stateButton {
   min-height: 32px;
 
   padding: 0.3rem;
 
-  border: 0;
-  border-left: 1px solid #d1d5db;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
 
   background: #ffffff;
   color: #4b5563;
@@ -414,10 +418,6 @@
   font-size: 0.66rem;
   font-weight: 700;
   line-height: 1.2;
-}
-
-.stateButton:first-child {
-  border-left: 0;
 }
 
 .stateINHERITED {
@@ -452,28 +452,32 @@
 
 @media (max-width: 900px) {
   .permissionRow {
-    grid-template-columns: 1fr 100px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     align-items: center;
   }
 
-  .permissionIdentity {
+  .permissionIdentity,
+  .inheritedColumn {
     grid-column: 1 / -1;
   }
 
-  .tristate {
+  .effectiveBadge {
     grid-column: 1 / -1;
+  }
+
+  .permissionTableHeader {
+    display: none;
   }
 }
 
 @media (max-width: 700px) {
   .permissionRow {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.5rem;
   }
 
   .permissionIdentity,
-  .inheritedBadge,
-  .tristate,
+  .inheritedColumn,
   .effectiveBadge {
     grid-column: 1;
   }
@@ -512,19 +516,6 @@
   .form {
     grid-template-columns: 1fr 1fr 1fr;
   }
-
-}
-
-@media (max-width: 900px) {
-  .permissionRow {
-    grid-template-columns: minmax(0, 1fr) 110px;
-    align-items: center;
-  }
-
-  .permissionIdentity,
-  .tristate {
-    grid-column: 1 / -1;
-  }
 }
 
 @media (max-width: 700px) {
@@ -535,15 +526,5 @@
   .permissionsHeader {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .permissionRow {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 0.6rem;
-    padding: 0.7rem;
-  }
-
-  .tristate {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

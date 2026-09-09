@@ -151,3 +151,18 @@ export async function savePayments(
   });
   return parseApiResponse<Sale>(response, "No se pudieron guardar los pagos de la venta.");
 }
+
+export async function updateSalePayments(
+  saleId: string,
+  payments: CreateSalePaymentPayload[]
+): Promise<Sale> {
+  const response = await executeWithAdminAuthorization(
+    { operationKey: "SALE_PAYMENT_MODIFY", resourceType: "SALE", resourceId: saleId },
+    (temporaryToken) => fetchWithAuth(`${API_URL}/sales/${saleId}/payments`, {
+      method: "PUT",
+      headers: { ...buildHeaders(true), ...(temporaryToken ? { "X-Admin-Authorization": temporaryToken } : {}) },
+      body: JSON.stringify(payments),
+    }),
+  );
+  return parseApiResponse<Sale>(response, "No se pudieron actualizar los pagos de la venta.");
+}

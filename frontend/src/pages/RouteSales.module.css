@@ -470,6 +470,10 @@ kbd {
   gap: 1rem;
 }
 
+.productListModal {
+  max-width: 760px;
+}
+
 .modalHeader {
   display: flex;
   align-items: center;

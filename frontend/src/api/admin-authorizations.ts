@@ -7,7 +7,9 @@ export type AdminOperationKey =
   | "CLIENT_UPDATE"
   | "PRODUCT_UPDATE"
   | "ROUTE_UPDATE"
-  | "DRIVER_UPDATE";
+  | "DRIVER_UPDATE"
+  | "SALE_PAYMENT_MODIFY"
+  | "ROUTE_PAYMENT_MODIFY";
 
 export type AdminResourceType = "SALE" | "CLIENT" | "PRODUCT" | "ROUTE" | "DRIVER";
 

@@ -130,6 +130,21 @@ export async function saveRouteSalePayments(
   return parseApiResponse<RouteSale>(response, "No se pudieron guardar los pagos de la ruta.");
 }
 
+export async function updateRouteSalePayments(
+  routeSaleId: string,
+  payments: CreateRouteSalePaymentPayload[]
+): Promise<RouteSale> {
+  const response = await executeWithAdminAuthorization(
+    { operationKey: "ROUTE_PAYMENT_MODIFY", resourceType: "ROUTE", resourceId: routeSaleId },
+    (temporaryToken) => fetchWithAuth(`${API_URL}/route-sales/${routeSaleId}/payments`, {
+      method: "PUT",
+      headers: { ...buildHeaders(true), ...(temporaryToken ? { "X-Admin-Authorization": temporaryToken } : {}) },
+      body: JSON.stringify(payments),
+    }),
+  );
+  return parseApiResponse<RouteSale>(response, "No se pudieron actualizar los pagos de la ruta.");
+}
+
 export async function changeRouteSaleStatus(id: string, status: RouteSaleStatus): Promise<RouteSale> {
   const response = await fetchWithAuth(`${API_URL}/route-sales/${id}/status`, {
     method: "PATCH",

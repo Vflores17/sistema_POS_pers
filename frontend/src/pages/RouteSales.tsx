@@ -16,6 +16,7 @@ import {
   type RouteSaleStatus as SaleStatus,
   type RouteSalePaymentMovement,
   saveRouteSalePayments as savePayments,
+  updateRouteSalePayments,
 } from "../api/route-sales";
 import styles from "./RouteSales.module.css";
 import Modal from "../components/Modal";
@@ -147,6 +148,7 @@ export default function RouteSales(): ReactElement {
   const isNewScreen = window.location.pathname === "/route-sales/new";
   const isEditScreen = window.location.pathname.endsWith("/edit");
 
+  const [loadedSale, setLoadedSale] = useState<Sale | null>(null);
   const isViewScreen = window.location.pathname.endsWith("/view");
   const isFormScreen = isNewScreen || isEditScreen || isViewScreen;
 
@@ -176,6 +178,30 @@ export default function RouteSales(): ReactElement {
   const [showCreateProductModal, setShowCreateProductModal] =
     useState<boolean>(false);
   const [productModalSearch, setProductModalSearch] = useState<string>("");
+
+  const productListWrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!showProductModal || productModalIndex < 0) return;
+    const wrap = productListWrapRef.current;
+    const rows = wrap?.querySelectorAll<HTMLTableRowElement>("tbody tr");
+    const row = rows?.[productModalIndex];
+    if (!wrap || !row) return;
+
+    const headerHeight = wrap.querySelector("thead")?.offsetHeight ?? 0;
+    const margin = 4;
+    const containerTop = wrap.getBoundingClientRect().top;
+    const rowTop = row.getBoundingClientRect().top - containerTop + wrap.scrollTop;
+    const rowBottom =
+      row.getBoundingClientRect().bottom - containerTop + wrap.scrollTop;
+    const visibleBottom = wrap.scrollTop + wrap.clientHeight;
+
+    if (rowBottom > visibleBottom) {
+      wrap.scrollTop = rowBottom - wrap.clientHeight;
+    } else if (rowTop < wrap.scrollTop + headerHeight + margin) {
+      wrap.scrollTop = Math.max(0, rowTop - headerHeight - margin);
+    }
+  }, [showProductModal, productModalIndex, productModalSearch, products]);
 
   const [productDraft, setProductDraft] = useState<ProductDraft>({
     name: "",
@@ -791,6 +817,7 @@ export default function RouteSales(): ReactElement {
           setClientSearch(clientName);
 
           loadPayments(sale.payments ?? []);
+          setLoadedSale(sale);
         } else {
           const next = await getNextRouteSaleInvoiceNumber();
           setInvoiceNumber(next);
@@ -814,6 +841,7 @@ export default function RouteSales(): ReactElement {
           setActiveLineId("");
           setClientDropdownIndex(-1);
           resetPayments();
+          setLoadedSale(null);
         }
       } else {
         const salesData = await listRouteSales();
@@ -1051,13 +1079,56 @@ export default function RouteSales(): ReactElement {
         comments: saleDraft.comments,
       };
 
-      const saved =
-        isEditScreen && id
-          ? await updateRouteSale(id, payload)
-          : await createRouteSale(payload);
+      let saved: Sale;
+      if (!isEditScreen) {
+        saved = await createRouteSale(payload);
+        if (canUpdate && paymentsPayload.length > 0) {
+          await savePayments(saved.id, paymentsPayload);
+        }
+      } else if (id && loadedSale) {
+        const invoiceChanged =
+          payload.clientId !== loadedSale.clientId ||
+          payload.driverId !== loadedSale.driverId ||
+          payload.paymentMethod !== loadedSale.paymentMethod ||
+          (payload.comments ?? "") !== (loadedSale.comments ?? "") ||
+          payload.items.length !== loadedSale.details.length ||
+          payload.items.some((item) => {
+            const detail = loadedSale.details.find(
+              (d) => d.productId === item.productId,
+            );
+            return (
+              !detail ||
+              detail.quantity !== item.quantity ||
+              (item.price ?? detail.price) !== detail.price
+            );
+          });
 
-      if (canUpdate && paymentsPayload.length > 0) {
-        await savePayments(saved.id, paymentsPayload);
+        const paymentsChanged =
+          paymentsPayload.length !== (loadedSale.payments ?? []).length ||
+          paymentsPayload.some((c) => {
+            if (!c.id) return true;
+            const o = (loadedSale.payments ?? []).find((p) => p.id === c.id);
+            return !o || o.method !== c.method || o.amount !== c.amount;
+          });
+
+        if (invoiceChanged) {
+          saved = await updateRouteSale(id, payload);
+        } else {
+          saved = loadedSale;
+        }
+        if (paymentsChanged) {
+          saved = await updateRouteSalePayments(id, paymentsPayload);
+        }
+      } else if (id) {
+        saved = await updateRouteSale(id, payload);
+        if (paymentsPayload.length > 0) {
+          await updateRouteSalePayments(id, paymentsPayload);
+        }
+      } else {
+        saved = await createRouteSale(payload);
+        if (paymentsPayload.length > 0) {
+          await savePayments(saved.id, paymentsPayload);
+        }
       }
 
       if (printAfterSave) {
@@ -1071,6 +1142,7 @@ export default function RouteSales(): ReactElement {
       setSelectedRowId("");
       setLineSearch({});
       resetPayments();
+      setLoadedSale(null);
 
       setModal({
         show: true,
@@ -1312,13 +1384,7 @@ export default function RouteSales(): ReactElement {
                         onChange={(event) =>
                           onPaymentToggle(item.key, event.target.checked)
                         }
-                        disabled={
-                          paymentDraft[item.key].amounts.some((entry) =>
-                            Boolean(entry.id),
-                          ) ||
-                          !isEditScreen ||
-                          !canUpdate
-                        }
+                        disabled={!isEditScreen}
                       />
                       <span
                         style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}
@@ -1346,16 +1412,10 @@ export default function RouteSales(): ReactElement {
                                       e.target.value,
                                     )
                                   }
-                                  disabled={
-                                    Boolean(entry.id) ||
-                                    !isEditScreen ||
-                                    !canUpdate
-                                  }
+                                  disabled={!isEditScreen}
                                 />
 
-                                {!entry.id &&
-                                  isEditScreen &&
-                                  canUpdate &&
+                                {isEditScreen &&
                                   paymentDraft[item.key].amounts.length > 1 && (
                                     <button
                                       type="button"
@@ -1372,7 +1432,7 @@ export default function RouteSales(): ReactElement {
                             ),
                           )}
 
-                          {isEditScreen && canUpdate && (
+                          {isEditScreen && (
                             <button
                               type="button"
                               className={`${styles.paymentActionButton} ${styles.paymentAddButton}`}
@@ -2091,7 +2151,7 @@ export default function RouteSales(): ReactElement {
 
           {showProductModal && (
             <div className={styles.modalBackdrop}>
-              <div className={styles.modal}>
+              <div className={`${styles.modal} ${styles.productListModal}`}>
                 <header className={styles.modalHeader}>
                   <h3>Productos</h3>
                   <button
@@ -2149,7 +2209,7 @@ export default function RouteSales(): ReactElement {
                     readOnly={isViewScreen}
                   />
                 </div>
-                <div className={styles.tableWrap}>
+                <div className={styles.tableWrap} ref={productListWrapRef}>
                   <table className={`${styles.table} ${styles.productListTable}`}>
                     <thead>
                       <tr>

@@ -219,6 +219,72 @@ public class RouteSaleService {
         return toResponse(saved);
     }
 
+    @Transactional
+    public RouteSaleResponse replacePayments(UUID routeSaleId, List<CreateRouteSalePaymentRequest> payments) {
+        RouteSale routeSale = routeSaleRepository.findByIdWithDetails(routeSaleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Route sale not found: " + routeSaleId));
+
+        if (routeSale.getStatus() == RouteSale.RouteStatus.CANCELLED) {
+            throw new ConflictException("Cannot modify a cancelled route sale");
+        }
+
+        List<CreateRouteSalePaymentRequest> requestedPayments = payments == null ? List.of() : payments;
+        Map<UUID, RouteSalePayment> existingById = routeSale.getPayments().stream()
+                .collect(Collectors.toMap(RouteSalePayment::getId, Function.identity()));
+        Set<UUID> referencedIds = new HashSet<>();
+
+        // VALIDAR PRIMERO
+        for (CreateRouteSalePaymentRequest request : requestedPayments) {
+            requirePositiveAmount(request.amount());
+            if (request.id() != null) {
+                if (!referencedIds.add(request.id())) {
+                    throw new ConflictException("Payment cannot be referenced more than once");
+                }
+                if (!existingById.containsKey(request.id())) {
+                    throw new ConflictException("Payment does not belong to this route sale");
+                }
+            }
+        }
+
+        BigDecimal requestedSum = requestedPayments.stream()
+                .map(CreateRouteSalePaymentRequest::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (requestedSum.compareTo(routeSale.getTotal()) > 0) {
+            throw new ConflictException("Payment total cannot exceed route sale total");
+        }
+
+        // MUTAR DESPUÉS
+        for (CreateRouteSalePaymentRequest request : requestedPayments) {
+            if (request.id() != null) {
+                RouteSalePayment existing = existingById.get(request.id());
+                existing.setMethod(request.method());
+                existing.setAmount(request.amount());
+            } else {
+                routeSale.getPayments().add(RouteSalePayment.builder()
+                        .routeSale(routeSale)
+                        .method(request.method())
+                        .amount(request.amount())
+                        .build());
+            }
+        }
+        routeSale.getPayments().removeIf(payment -> payment.getId() != null && !referencedIds.contains(payment.getId()));
+
+        BigDecimal paidAmount = routeSale.getPayments().stream()
+                .map(RouteSalePayment::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        if (paidAmount.compareTo(BigDecimal.ZERO) == 0) {
+            routeSale.setStatus(RouteSale.RouteStatus.PENDING);
+        } else if (paidAmount.compareTo(routeSale.getTotal()) < 0) {
+            routeSale.setStatus(RouteSale.RouteStatus.PARTIAL);
+        } else {
+            routeSale.setStatus(RouteSale.RouteStatus.PAID);
+        }
+
+        RouteSale saved = routeSaleRepository.saveAndFlush(routeSale);
+        return toResponse(saved);
+    }
+
     @Transactional(readOnly = true)
     public List<RouteSalePaymentMovementResponse> findPaymentMovements(OffsetDateTime from, OffsetDateTime to) {
         requireValidPeriod(from, to);

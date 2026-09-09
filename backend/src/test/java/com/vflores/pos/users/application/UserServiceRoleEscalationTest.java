@@ -99,7 +99,7 @@ class UserServiceRoleEscalationTest {
     }
 
     private void stubUniqueGuards() {
-        when(userRepository.findByUsername(any())).thenReturn(Optional.empty());
+        when(userRepository.findByUsernameIgnoreCase(any())).thenReturn(Optional.empty());
         when(userRepository.findByEmail(any())).thenReturn(Optional.empty());
     }
 

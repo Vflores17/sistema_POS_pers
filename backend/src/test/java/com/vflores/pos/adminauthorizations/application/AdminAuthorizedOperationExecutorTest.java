@@ -143,6 +143,70 @@ class AdminAuthorizedOperationExecutorTest {
     }
 
     @Test
+    void adminRoleRunsPaymentModificationDirectlyWithoutTemporaryAuthorization() {
+        Authentication authentication = authentication("ROLE_ADMIN");
+
+        String result = executor.executeForAdminActor(
+                authentication, "SALE_PAYMENT_MODIFY", "SALE", RESOURCE_ID, "unused",
+                () -> "updated"
+        );
+
+        assertThat(result).isEqualTo("updated");
+        verify(authorizationService, never()).reserve(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()
+        );
+        verify(authorizationService, never()).consume(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void paymentModifyPermissionWithoutAdminRoleStillRequiresTemporaryAuthorization() {
+        AtomicBoolean executed = new AtomicBoolean();
+
+        assertThatThrownBy(() -> executor.executeForAdminActor(
+                authentication("SALE_PAYMENT_MODIFY"), "SALE_PAYMENT_MODIFY", "SALE", RESOURCE_ID, null,
+                () -> {
+                    executed.set(true);
+                    return "updated";
+                }
+        )).isInstanceOf(AdminAuthorizationRequiredException.class);
+
+        assertThat(executed).isFalse();
+    }
+
+    @Test
+    void paymentModifyPermissionWithoutAdminRoleUsesTokenWhenProvided() {
+        Authentication authentication = authentication("ROUTE_PAYMENT_MODIFY");
+        AdminAuthorization authorization = AdminAuthorization.builder().id(AUTHORIZATION_ID).build();
+        when(authorizationService.reserve(
+                "plain-token", REQUESTER_ID, "ROUTE_PAYMENT_MODIFY", "ROUTE", RESOURCE_ID
+        )).thenReturn(authorization);
+
+        String result = executor.executeForAdminActor(
+                authentication, "ROUTE_PAYMENT_MODIFY", "ROUTE", RESOURCE_ID,
+                "plain-token", () -> "updated"
+        );
+
+        assertThat(result).isEqualTo("updated");
+        var order = org.mockito.Mockito.inOrder(authorizationService);
+        order.verify(authorizationService).reserve(
+                "plain-token", REQUESTER_ID, "ROUTE_PAYMENT_MODIFY", "ROUTE", RESOURCE_ID
+        );
+        order.verify(authorizationService).consume(AUTHORIZATION_ID);
+    }
+
+    @Test
+    void executionForAdminActorBoundaryIsTransactional() throws NoSuchMethodException {
+        Method method = AdminAuthorizedOperationExecutor.class.getMethod(
+                "executeForAdminActor", Authentication.class, String.class, String.class,
+                UUID.class, String.class, java.util.function.Supplier.class
+        );
+
+        assertThat(method.isAnnotationPresent(Transactional.class)).isTrue();
+    }
+
+    @Test
     void concurrentAttemptsExecuteBusinessOperationOnlyOnce() throws Exception {
         Authentication authentication = authentication();
         AdminAuthorization authorization = AdminAuthorization.builder().id(AUTHORIZATION_ID).build();

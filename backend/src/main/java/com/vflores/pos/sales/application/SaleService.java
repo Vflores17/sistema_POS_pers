@@ -414,6 +414,72 @@ Map<UUID, BigDecimal> requestedQuantities = aggregateQuantities(
         return toResponse(saved);
     }
 
+    @Transactional
+    public SaleResponse replacePayments(UUID saleId, List<CreateSalePaymentRequest> payments) {
+        Sale sale = saleRepository.findByIdWithDetails(saleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Sale not found: " + saleId));
+
+        if (sale.getStatus() == Sale.SaleStatus.CANCELLED) {
+            throw new ConflictException("Cannot modify a cancelled sale");
+        }
+
+        List<CreateSalePaymentRequest> requestedPayments = payments == null ? List.of() : payments;
+        Map<UUID, SalePayment> existingById = sale.getPayments().stream()
+                .collect(Collectors.toMap(SalePayment::getId, Function.identity()));
+        Set<UUID> referencedIds = new HashSet<>();
+
+        // VALIDAR PRIMERO
+        for (CreateSalePaymentRequest request : requestedPayments) {
+            requirePositiveAmount(request.amount());
+            if (request.id() != null) {
+                if (!referencedIds.add(request.id())) {
+                    throw new ConflictException("Payment cannot be referenced more than once");
+                }
+                if (!existingById.containsKey(request.id())) {
+                    throw new ConflictException("Payment does not belong to this sale");
+                }
+            }
+        }
+
+        BigDecimal requestedSum = requestedPayments.stream()
+                .map(CreateSalePaymentRequest::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (requestedSum.compareTo(sale.getTotal()) > 0) {
+            throw new ConflictException("Payment total cannot exceed sale total");
+        }
+
+        // MUTAR DESPUÉS
+        for (CreateSalePaymentRequest request : requestedPayments) {
+            if (request.id() != null) {
+                SalePayment existing = existingById.get(request.id());
+                existing.setMethod(request.method());
+                existing.setAmount(request.amount());
+            } else {
+                sale.getPayments().add(SalePayment.builder()
+                        .sale(sale)
+                        .method(request.method())
+                        .amount(request.amount())
+                        .build());
+            }
+        }
+        sale.getPayments().removeIf(payment -> payment.getId() != null && !referencedIds.contains(payment.getId()));
+
+        BigDecimal paidAmount = sale.getPayments().stream()
+                .map(SalePayment::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        if (paidAmount.compareTo(BigDecimal.ZERO) == 0) {
+            sale.setStatus(Sale.SaleStatus.PENDING);
+        } else if (paidAmount.compareTo(sale.getTotal()) < 0) {
+            sale.setStatus(Sale.SaleStatus.PARTIAL);
+        } else {
+            sale.setStatus(Sale.SaleStatus.PAID);
+        }
+
+        Sale saved = saleRepository.saveAndFlush(sale);
+        return toResponse(saved);
+    }
+
     @Transactional(readOnly = true)
     public List<SalePaymentMovementResponse> findPaymentMovements(OffsetDateTime from, OffsetDateTime to) {
         requireValidPeriod(from, to);

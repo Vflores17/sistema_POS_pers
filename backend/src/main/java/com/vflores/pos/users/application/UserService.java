@@ -71,7 +71,7 @@ public class UserService {
         administrationGuard.requireAdminActorForAdminMembershipChange(Set.of(), roles);
 
         User user = User.builder()
-                .username(request.username().trim())
+                .username(request.username().trim().toLowerCase(Locale.ROOT))
                 .email(request.email().trim().toLowerCase())
                 .fullName(request.fullName().trim())
                 .passwordHash(passwordEncoder.encode(request.password()))
@@ -146,7 +146,7 @@ public class UserService {
     }
 
     private void validateUniqueness(String username, String email, UUID currentUserId) {
-        userRepository.findByUsername(username)
+        userRepository.findByUsernameIgnoreCase(username.trim().toLowerCase(Locale.ROOT))
                 .filter(existing -> !existing.getId().equals(currentUserId))
                 .ifPresent(existing -> {
                     throw new ConflictException("Username is already registered");

@@ -1,5 +1,6 @@
 package com.vflores.pos.auth.application;
 
+import com.vflores.pos.auth.api.dto.ChangePasswordRequest;
 import com.vflores.pos.auth.api.dto.LoginRequest;
 import com.vflores.pos.auth.api.dto.LoginResponse;
 import com.vflores.pos.auth.api.dto.CurrentUserResponse;
@@ -16,6 +17,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,6 +47,7 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserDetailsService userDetailsService;
     private final EffectivePermissionService effectivePermissionService;
+    private final PasswordEncoder passwordEncoder;
 
     @Transactional
     public LoginResponse login(LoginRequest request) {
@@ -94,6 +98,24 @@ public class AuthService {
                 .orElseThrow(() -> new BadCredentialsException("Invalid refresh token"));
 
         refreshTokenRepository.revokeAllByUserId(refreshToken.getUser().getId());
+    }
+
+    @Transactional
+    public void changePassword(UUID userId, ChangePasswordRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UsernameNotFoundException("Invalid credentials"));
+
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+            throw new BadCredentialsException("Current password is incorrect");
+        }
+        if (passwordEncoder.matches(request.newPassword(), user.getPasswordHash())) {
+            throw new BadCredentialsException("New password must differ from the current password");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        userRepository.save(user);
+
+        refreshTokenRepository.revokeAllByUserId(userId);
     }
 
     @Transactional(readOnly = true)

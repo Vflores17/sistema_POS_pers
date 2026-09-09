@@ -16,6 +16,7 @@ import {
   type SaleStatus,
   type SalePaymentMovement,
   savePayments,
+  updateSalePayments,
 } from "../api/sales";
 import styles from "./Sales.module.css";
 import Modal from "../components/Modal";
@@ -134,6 +135,7 @@ export default function Sales(): ReactElement {
   const { id } = useParams<{ id: string }>();
   const isNewScreen = window.location.pathname === "/sales/new";
   const isEditScreen = window.location.pathname.endsWith("/edit");
+  const [loadedSale, setLoadedSale] = useState<Sale | null>(null);
   const isViewScreen = window.location.pathname.endsWith("/view");
   const isFormScreen = isNewScreen || isEditScreen || isViewScreen;
 
@@ -155,6 +157,30 @@ export default function Sales(): ReactElement {
   const [showCreateProductModal, setShowCreateProductModal] =
     useState<boolean>(false);
   const [productModalSearch, setProductModalSearch] = useState<string>("");
+
+  const productListWrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!showProductModal || productModalIndex < 0) return;
+    const wrap = productListWrapRef.current;
+    const rows = wrap?.querySelectorAll<HTMLTableRowElement>("tbody tr");
+    const row = rows?.[productModalIndex];
+    if (!wrap || !row) return;
+
+    const headerHeight = wrap.querySelector("thead")?.offsetHeight ?? 0;
+    const margin = 4;
+    const containerTop = wrap.getBoundingClientRect().top;
+    const rowTop = row.getBoundingClientRect().top - containerTop + wrap.scrollTop;
+    const rowBottom =
+      row.getBoundingClientRect().bottom - containerTop + wrap.scrollTop;
+    const visibleBottom = wrap.scrollTop + wrap.clientHeight;
+
+    if (rowBottom > visibleBottom) {
+      wrap.scrollTop = rowBottom - wrap.clientHeight;
+    } else if (rowTop < wrap.scrollTop + headerHeight + margin) {
+      wrap.scrollTop = Math.max(0, rowTop - headerHeight - margin);
+    }
+  }, [showProductModal, productModalIndex, productModalSearch, products]);
 
   const [productDraft, setProductDraft] = useState<ProductDraft>({
     name: "",
@@ -686,6 +712,7 @@ export default function Sales(): ReactElement {
           setClientSearch(clientName);
 
           loadPayments(sale.payments ?? []);
+            setLoadedSale(sale);
         } else {
           const next = await getNextInvoiceNumber();
           setInvoiceNumber(next);
@@ -696,6 +723,7 @@ export default function Sales(): ReactElement {
           setActiveLineId("");
           setClientDropdownIndex(-1);
           resetPayments();
+            setLoadedSale(null);
         }
       } else {
         const salesData = await listSales();
@@ -927,10 +955,54 @@ export default function Sales(): ReactElement {
         })),
         comments: saleDraft.comments,
       };
-      const saved =
-        isEditScreen && id
-          ? await updateSale(id, payload)
-          : await createSale(payload);
+      let saved: Sale;
+      if (!isEditScreen) {
+        saved = await createSale(payload);
+        if (canUpdate && paymentsPayload.length > 0) {
+          await savePayments(saved.id, paymentsPayload);
+        }
+      } else if (id && loadedSale) {
+        const invoiceChanged =
+          payload.clientId !== loadedSale.clientId ||
+          payload.paymentMethod !== loadedSale.paymentMethod ||
+          (payload.comments ?? "") !== (loadedSale.comments ?? "") ||
+          payload.items.length !== loadedSale.details.length ||
+          payload.items.some((item) => {
+            const detail = loadedSale.details.find(
+              (d) => d.productId === item.productId,
+            );
+            return (
+              !detail ||
+              detail.quantity !== item.quantity ||
+              (item.price ?? detail.price) !== detail.price
+            );
+          });
+
+        const paymentsChanged =
+          paymentsPayload.length !== (loadedSale.payments ?? []).length ||
+          paymentsPayload.some((c) => {
+            if (!c.id) return true;
+            const o = (loadedSale.payments ?? []).find((p) => p.id === c.id);
+            return !o || o.method !== c.method || o.amount !== c.amount;
+          });
+
+        if (invoiceChanged) {
+          saved = await updateSale(id, payload);
+        } else {
+          saved = loadedSale;
+        }
+        if (paymentsChanged) {
+          saved = await updateSalePayments(id, paymentsPayload);
+        }
+      } else if (id) {
+        saved = await updateSale(id, payload);
+        if (paymentsPayload.length > 0) {
+          await updateSalePayments(id, paymentsPayload);
+        }
+      } else {
+        saved = await createSale(payload);
+      }
+
       if (caja.abierta) {
         const yaExiste = caja.facturaIds.includes(saved.id);
         const tienePagos = paymentsPayload.length > 0;
@@ -965,9 +1037,6 @@ export default function Sales(): ReactElement {
           persistCaja(updatedCaja);
         }
       }
-      if (canUpdate && paymentsPayload.length > 0) {
-        await savePayments(saved.id, paymentsPayload);
-      }
       if (!isEditScreen && saleDraft.status && saleDraft.status !== "PENDING") {
         await changeSaleStatus(saved.id, saleDraft.status);
       }
@@ -984,6 +1053,7 @@ export default function Sales(): ReactElement {
       setSelectedRowId("");
       setLineSearch({});
       resetPayments();
+      setLoadedSale(null);
 
       setModal({
         show: true,
@@ -1281,13 +1351,7 @@ export default function Sales(): ReactElement {
                           onChange={(event) =>
                             onPaymentToggle(item.key, event.target.checked)
                           }
-                          disabled={
-                            paymentDraft[item.key].amounts.some((entry) =>
-                              Boolean(entry.id),
-                            ) ||
-                            isViewScreen ||
-                            (isEditScreen && !canUpdate)
-                          }
+                          disabled={isViewScreen}
                         />
                         <span
                           style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}
@@ -1316,15 +1380,10 @@ export default function Sales(): ReactElement {
                                       e.target.value,
                                     )
                                   }
-                                  disabled={
-                                    Boolean(entry.id) ||
-                                    isViewScreen ||
-                                    (isEditScreen && !canUpdate)
-                                  }
+                                  disabled={isViewScreen}
                                 />
 
-                                {!entry.id &&
-                                  !isViewScreen &&
+                                {!isViewScreen &&
                                   paymentDraft[item.key].amounts.length > 1 && (
                                     <button
                                       type="button"
@@ -2047,7 +2106,7 @@ export default function Sales(): ReactElement {
 
           {showProductModal && (
             <div className={styles.modalBackdrop}>
-              <div className={styles.modal}>
+              <div className={`${styles.modal} ${styles.productListModal}`}>
                 <header className={styles.modalHeader}>
                   <h3>Productos</h3>
                   <button
@@ -2105,7 +2164,7 @@ export default function Sales(): ReactElement {
                     readOnly={isViewScreen}
                   />
                 </div>
-                <div className={styles.tableWrap}>
+                <div className={styles.tableWrap} ref={productListWrapRef}>
                   <table className={`${styles.table} ${styles.productListTable}`}>
                     <thead>
                       <tr>

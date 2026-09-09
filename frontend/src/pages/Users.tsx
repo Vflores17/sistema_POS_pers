@@ -35,6 +35,62 @@ const MODULES = [
   ["USERS", "Usuarios"], ["ROLES", "Roles"], ["PERMISSIONS", "Permisos"],
 ] as const;
 
+const PERMISSION_LABELS: Record<string, string> = {
+  SALE_READ: "Ver ventas",
+  SALE_CREATE: "Crear venta",
+  SALE_UPDATE: "Modificar venta",
+  SALE_DELETE: "Eliminar venta",
+  SALE_CANCEL: "Cancelar venta",
+  SALE_PAYMENT_MODIFY: "Modificar pagos de venta",
+  SALE_PRICE_OVERRIDE: "Modificar precios en venta",
+  SALE_WRITE: "Gestionar ventas",
+  CLIENT_READ: "Ver clientes",
+  CLIENT_CREATE: "Crear cliente",
+  CLIENT_UPDATE: "Modificar cliente",
+  CLIENT_DELETE: "Eliminar cliente",
+  CLIENT_WRITE: "Gestionar clientes",
+  PRODUCT_READ: "Ver productos",
+  PRODUCT_CREATE: "Crear producto",
+  PRODUCT_UPDATE: "Modificar producto",
+  PRODUCT_DELETE: "Eliminar producto",
+  PRODUCT_WRITE: "Gestionar productos",
+  PRICE_READ: "Ver precios",
+  PRICE_CREATE: "Crear precio",
+  PRICE_UPDATE: "Modificar precio",
+  PRICE_DELETE: "Eliminar precio",
+  PRICE_WRITE: "Gestionar precios",
+  ROUTE_READ: "Ver rutas",
+  ROUTE_CREATE: "Crear ruta",
+  ROUTE_UPDATE: "Modificar ruta",
+  ROUTE_DELETE: "Eliminar ruta",
+  ROUTE_CANCEL: "Cancelar ruta",
+  ROUTE_PAYMENT_MODIFY: "Modificar pagos de ruta",
+  ROUTE_PRICE_OVERRIDE: "Modificar precios en ruta",
+  ROUTE_WRITE: "Gestionar rutas",
+  DRIVER_READ: "Ver choferes",
+  DRIVER_CREATE: "Crear chofer",
+  DRIVER_UPDATE: "Modificar chofer",
+  DRIVER_DELETE: "Eliminar chofer",
+  DRIVER_WRITE: "Gestionar choferes",
+  USER_READ: "Ver usuarios",
+  USER_CREATE: "Crear usuario",
+  USER_UPDATE: "Modificar usuario",
+  USER_DELETE: "Eliminar usuario",
+  USER_ASSIGN_ROLE: "Asignar roles",
+  USER_ASSIGN_PERMISSION: "Asignar permisos individuales",
+  USER_WRITE: "Gestionar usuarios",
+  ROLE_READ: "Ver roles",
+  ROLE_CREATE: "Crear rol",
+  ROLE_UPDATE: "Modificar rol",
+  ROLE_DELETE: "Eliminar rol",
+  ROLE_ASSIGN_PERMISSION: "Editar permisos de rol",
+  ROLE_WRITE: "Gestionar roles",
+  PERMISSION_READ: "Ver catálogo de permisos",
+  PERMISSION_CREATE: "Crear permiso",
+  PERMISSION_UPDATE: "Modificar permiso",
+  PERMISSION_DELETE: "Eliminar permiso",
+};
+
 export default function Users(): ReactElement {
   const { hasPermission, hasAllPermissions } = usePermissions();
   const canCreate = hasAllPermissions("USER_CREATE", "USER_ASSIGN_ROLE");
@@ -261,7 +317,7 @@ export default function Users(): ReactElement {
                   <div><h3>Permisos individuales</h3><p>{editingId ? "La herencia refleja los roles guardados; cambios de rol se recalculan al guardar." : "La herencia final se calculará después de crear el usuario."}</p></div>
                   <button className={`${styles.button} ${styles.secondary}`} type="button" onClick={() => void resetAllOverrides()} disabled={loadingPermissions}>Restablecer todos</button>
                 </div>
-                <div className={styles.legend}><span>Heredado por rol</span><span>ALLOW explícito</span><span>DENY explícito</span><span>Efectivo final</span></div>
+                <div className={styles.permissionTableHeader}><span>Permiso</span><span>Heredado por rol</span><span>Permitir</span><span>Denegar</span><span>Efectivo final</span></div>
                 {loadingPermissions ? (
                   <div aria-label="Cargando permisos" aria-busy="true" style={{ display: "grid", gap: "0.55rem" }}>
                     {Array.from({ length: 5 }, (_, index) => (
@@ -276,9 +332,13 @@ export default function Users(): ReactElement {
                         const choice = choices[permission.code] ?? "INHERITED";
                         const finalState = effective(permission.code);
                         return <div className={styles.permissionRow} key={permission.id}>
-                          <div className={styles.permissionIdentity}><strong>{permission.code}</strong><span>{permission.description || "Sin descripción"}</span></div>
-                          <span className={`${styles.inheritedBadge} ${inherited(permission.code) ? styles.inheritedOn : ""}`}>{!editingId || !permissionInfo ? "Por calcular" : inherited(permission.code) ? "Heredado" : "No heredado"}</span>
-                          <div className={styles.tristate}>{(["INHERITED", "ALLOW", "DENY"] as const).map((option) => <button key={option} type="button" aria-pressed={choice === option} className={`${styles.stateButton} ${choice === option ? styles[`state${option}`] : ""}`} onClick={() => choose(permission.code, option)}>{option === "INHERITED" ? "Heredado" : option}</button>)}</div>
+                          <div className={styles.permissionIdentity}><strong>{PERMISSION_LABELS[permission.code] ?? permission.code}</strong><span>{permission.code}</span></div>
+                          <div className={styles.inheritedColumn}>
+                            <span className={`${styles.inheritedBadge} ${inherited(permission.code) ? styles.inheritedOn : ""}`}>{!editingId || !permissionInfo ? "Por calcular" : inherited(permission.code) ? "Heredado" : "No heredado"}</span>
+                            <button type="button" aria-pressed={choice === "INHERITED"} className={`${styles.stateButton} ${choice === "INHERITED" ? styles.stateINHERITED : ""}`} onClick={() => choose(permission.code, "INHERITED")}>Heredado</button>
+                          </div>
+                          <button type="button" aria-pressed={choice === "ALLOW"} className={`${styles.stateButton} ${choice === "ALLOW" ? styles.stateALLOW : ""}`} onClick={() => choose(permission.code, "ALLOW")}>Permitir</button>
+                          <button type="button" aria-pressed={choice === "DENY"} className={`${styles.stateButton} ${choice === "DENY" ? styles.stateDENY : ""}`} onClick={() => choose(permission.code, "DENY")}>Denegar</button>
                           <span className={`${styles.effectiveBadge} ${finalState === true ? styles.effectiveOn : finalState === false ? styles.effectiveOff : styles.effectivePending}`}>{finalState === true ? "Efectivo" : finalState === false ? "Sin acceso" : "Al guardar"}</span>
                         </div>;
                       })}</div>

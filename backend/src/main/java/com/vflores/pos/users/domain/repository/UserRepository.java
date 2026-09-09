@@ -7,12 +7,15 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificationExecutor<User> {
 
     Optional<User> findByUsername(String username);
+
+    Optional<User> findByUsernameIgnoreCase(String username);
 
     Optional<User> findByEmail(String email);
 
@@ -25,8 +28,9 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
             LEFT JOIN FETCH r.permissions p
             WHERE lower(u.username) = lower(:identifier)
                OR lower(u.email) = lower(:identifier)
+            ORDER BY u.createdAt ASC
             """)
-    Optional<User> findForAuthentication(@Param("identifier") String identifier);
+    List<User> findAllForAuthentication(@Param("identifier") String identifier);
 
     boolean existsByUsername(String username);
 

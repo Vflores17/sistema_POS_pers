@@ -119,4 +119,18 @@ public class SaleController {
     ) {
         return ResponseEntity.ok(ApiResponse.ok(saleService.savePayments(id, payments)));
     }
+
+    @PutMapping("/{id}/payments")
+    public ResponseEntity<ApiResponse<SaleResponse>> replacePayments(
+            @PathVariable UUID id,
+            @Valid @RequestBody List<@Valid CreateSalePaymentRequest> payments,
+            @RequestHeader(value = "X-Admin-Authorization", required = false) String adminAuthorization,
+            Authentication authentication
+    ) {
+        SaleResponse response = adminAuthorizedOperationExecutor.executeForAdminActor(
+                authentication, "SALE_PAYMENT_MODIFY", "SALE", id, adminAuthorization,
+                () -> saleService.replacePayments(id, payments)
+        );
+        return ResponseEntity.ok(ApiResponse.ok(response));
+    }
 }

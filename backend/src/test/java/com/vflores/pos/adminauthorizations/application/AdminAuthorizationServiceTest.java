@@ -134,6 +134,42 @@ class AdminAuthorizationServiceTest {
     }
 
     @Test
+    void paymentModifyOperationsAreValidForIssue() {
+        when(authorizationRepository.save(any())).thenAnswer(invocation -> {
+            AdminAuthorization persisted = invocation.getArgument(0);
+            persisted.setId(UUID.randomUUID());
+            return persisted;
+        });
+
+        prepareValidIssue("SALE_PAYMENT_MODIFY");
+        AdminAuthorizationResponse salesResponse = service.issue(REQUESTER_ID, request("SALE_PAYMENT_MODIFY", "SALE"));
+        assertThat(salesResponse.token()).isNotBlank();
+
+        prepareValidIssue("ROUTE_PAYMENT_MODIFY");
+        AdminAuthorizationResponse routeResponse = service.issue(REQUESTER_ID, request("ROUTE_PAYMENT_MODIFY", "ROUTE"));
+        assertThat(routeResponse.token()).isNotBlank();
+    }
+
+    @Test
+    void paymentModifyOperationsRequireTheirOwnResourceType() {
+        when(userRepository.findById(REQUESTER_ID)).thenReturn(Optional.of(requester));
+
+        assertThatThrownBy(() -> service.issue(REQUESTER_ID, request("SALE_PAYMENT_MODIFY", "ROUTE")))
+                .isInstanceOf(AdminAuthorizationRejectedException.class);
+        assertThatThrownBy(() -> service.issue(REQUESTER_ID, request("ROUTE_PAYMENT_MODIFY", "SALE")))
+                .isInstanceOf(AdminAuthorizationRejectedException.class);
+        verify(authenticationManager, never()).authenticate(any());
+    }
+
+    @Test
+    void paymentModifyTokenMustMatchOperationAndResource() {
+        assertMismatch(UUID.randomUUID(), "SALE_PAYMENT_MODIFY", "SALE", RESOURCE_ID);
+        assertMismatch(REQUESTER_ID, "SALE_PAYMENT_MODIFY", "ROUTE", RESOURCE_ID);
+        assertMismatch(REQUESTER_ID, "ROUTE_PAYMENT_MODIFY", "ROUTE", RESOURCE_ID);
+        assertMismatch(REQUESTER_ID, "SALE_PAYMENT_MODIFY", "SALE", UUID.randomUUID());
+    }
+
+    @Test
     void adminWithoutExactPermissionIsRejected() {
         prepareAuthenticatedApprover(admin);
         when(effectivePermissionService.resolve(admin)).thenReturn(resolution(Set.of("SALE_READ")));

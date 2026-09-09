@@ -93,6 +93,20 @@ public class RouteSaleController {
         return ResponseEntity.ok(ApiResponse.ok(routeSaleService.savePayments(id, payments)));
     }
 
+    @PutMapping("/{id}/payments")
+    public ResponseEntity<ApiResponse<RouteSaleResponse>> replacePayments(
+            @PathVariable UUID id,
+            @Valid @RequestBody List<@Valid CreateRouteSalePaymentRequest> payments,
+            @RequestHeader(value = "X-Admin-Authorization", required = false) String adminAuthorization,
+            Authentication authentication
+    ) {
+        RouteSaleResponse response = adminAuthorizedOperationExecutor.executeForAdminActor(
+                authentication, "ROUTE_PAYMENT_MODIFY", "ROUTE", id, adminAuthorization,
+                () -> routeSaleService.replacePayments(id, payments)
+        );
+        return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
     @GetMapping("/next-invoice-number")
     public ResponseEntity<ApiResponse<Long>> getNextInvoiceNumber() {
         return ResponseEntity.ok(ApiResponse.ok(routeSaleService.getNextInvoiceNumber()));

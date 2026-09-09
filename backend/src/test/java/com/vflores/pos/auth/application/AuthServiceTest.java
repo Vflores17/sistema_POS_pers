@@ -1,5 +1,6 @@
 package com.vflores.pos.auth.application;
 
+import com.vflores.pos.auth.api.dto.ChangePasswordRequest;
 import com.vflores.pos.auth.api.dto.CurrentUserResponse;
 import com.vflores.pos.auth.api.dto.LoginRequest;
 import com.vflores.pos.auth.api.dto.LoginResponse;
@@ -31,11 +32,14 @@ import java.security.MessageDigest;
 import org.mockito.ArgumentCaptor;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
@@ -54,6 +58,8 @@ class AuthServiceTest {
     private UserDetailsService userDetailsService;
     @Mock
     private EffectivePermissionService effectivePermissionService;
+    @Mock
+    private PasswordEncoder passwordEncoder;
 
     @InjectMocks
     private AuthService authService;
@@ -160,6 +166,81 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.login(new LoginRequest("known-user", "wrong")))
                 .isInstanceOf(BadCredentialsException.class)
                 .hasMessage("Invalid credentials");
+    }
+
+    @Test
+    void changePasswordUpdatesPasswordHashAndRevokesAllRefreshTokens() {
+        UUID userId = UUID.randomUUID();
+        User user = User.builder().id(userId).username("seller").passwordHash("old-hash").build();
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("old-pass", "old-hash")).thenReturn(true);
+        when(passwordEncoder.matches("new-pass-123", "old-hash")).thenReturn(false);
+        when(passwordEncoder.encode("new-pass-123")).thenReturn("new-hash");
+
+        authService.changePassword(userId, new ChangePasswordRequest("old-pass", "new-pass-123"));
+
+        assertThat(user.getPasswordHash()).isEqualTo("new-hash");
+        verify(userRepository).save(user);
+        verify(refreshTokenRepository).revokeAllByUserId(userId);
+    }
+
+    @Test
+    void changePasswordWithWrongCurrentPasswordIsRejected() {
+        UUID userId = UUID.randomUUID();
+        User user = User.builder().id(userId).username("seller").passwordHash("old-hash").build();
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("wrong-pass", "old-hash")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.changePassword(userId,
+                new ChangePasswordRequest("wrong-pass", "new-pass-123")))
+                .isInstanceOf(BadCredentialsException.class);
+        verify(userRepository, org.mockito.Mockito.never()).save(user);
+        verify(refreshTokenRepository, org.mockito.Mockito.never()).revokeAllByUserId(userId);
+    }
+
+    @Test
+    void changePasswordRejectsNewPasswordEqualToCurrent() {
+        UUID userId = UUID.randomUUID();
+        User user = User.builder().id(userId).username("seller").passwordHash("old-hash").build();
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("same-pass", "old-hash")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.changePassword(userId,
+                new ChangePasswordRequest("same-pass", "same-pass")))
+                .isInstanceOf(BadCredentialsException.class);
+        verify(userRepository, org.mockito.Mockito.never()).save(user);
+        verify(refreshTokenRepository, org.mockito.Mockito.never()).revokeAllByUserId(userId);
+    }
+
+    @Test
+    void changePasswordForNonexistentUserIsRejected() {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.findById(userId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.changePassword(userId,
+                new ChangePasswordRequest("old-pass", "new-pass-123")))
+                .isInstanceOf(UsernameNotFoundException.class);
+    }
+
+    @Test
+    void passwordChangeMakesOldPasswordUnusableAndNewPasswordUsable() {
+        UUID userId = UUID.randomUUID();
+        String oldHash = "encoded-old";
+        String newHash = "encoded-new";
+        User user = User.builder().id(userId).username("seller").passwordHash(oldHash).build();
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("old-pass", oldHash)).thenReturn(true);
+        when(passwordEncoder.matches("new-pass-123", oldHash)).thenReturn(false);
+        when(passwordEncoder.matches("new-pass-123", newHash)).thenReturn(true);
+        when(passwordEncoder.matches("old-pass", newHash)).thenReturn(false);
+        when(passwordEncoder.encode("new-pass-123")).thenReturn(newHash);
+        when(userRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        authService.changePassword(userId, new ChangePasswordRequest("old-pass", "new-pass-123"));
+        User saved = userRepository.save(user);
+
+        assertThat(passwordEncoder.matches("old-pass", saved.getPasswordHash())).isFalse();
+        assertThat(passwordEncoder.matches("new-pass-123", saved.getPasswordHash())).isTrue();
     }
 
     private static String sha256(String value) {

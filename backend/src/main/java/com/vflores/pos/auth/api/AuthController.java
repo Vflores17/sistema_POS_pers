@@ -1,5 +1,6 @@
 package com.vflores.pos.auth.api;
 
+import com.vflores.pos.auth.api.dto.ChangePasswordRequest;
 import com.vflores.pos.auth.api.dto.LoginRequest;
 import com.vflores.pos.auth.api.dto.LoginResponse;
 import com.vflores.pos.auth.api.dto.CurrentUserResponse;
@@ -54,6 +55,15 @@ public class AuthController {
     public ResponseEntity<ApiResponse<String>> logout(@Valid @RequestBody RefreshTokenRequest request) {
         authService.logout(request);
         return ResponseEntity.ok(ApiResponse.ok("Logged out"));
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<ApiResponse<String>> changePassword(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
+            @Valid @RequestBody ChangePasswordRequest request
+    ) {
+        authService.changePassword(currentUser.getId(), request);
+        return ResponseEntity.ok(ApiResponse.ok("Password changed"));
     }
 
     @GetMapping("/me")

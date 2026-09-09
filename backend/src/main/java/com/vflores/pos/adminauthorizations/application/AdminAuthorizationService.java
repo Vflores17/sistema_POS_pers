@@ -45,7 +45,9 @@ public class AdminAuthorizationService {
             "CLIENT_UPDATE", new OperationPolicy("CLIENT_UPDATE", "CLIENT"),
             "PRODUCT_UPDATE", new OperationPolicy("PRODUCT_UPDATE", "PRODUCT"),
             "ROUTE_UPDATE", new OperationPolicy("ROUTE_UPDATE", "ROUTE"),
-            "DRIVER_UPDATE", new OperationPolicy("DRIVER_UPDATE", "DRIVER")
+            "DRIVER_UPDATE", new OperationPolicy("DRIVER_UPDATE", "DRIVER"),
+            "SALE_PAYMENT_MODIFY", new OperationPolicy("SALE_PAYMENT_MODIFY", "SALE"),
+            "ROUTE_PAYMENT_MODIFY", new OperationPolicy("ROUTE_PAYMENT_MODIFY", "ROUTE")
     );
 
     private final AuthenticationManager authenticationManager;

@@ -93,7 +93,8 @@ class UserServiceRefreshTokenLifecycleTest {
                 userRepository,
                 refreshTokenRepository,
                 userDetailsService,
-                effectivePermissionService);
+                effectivePermissionService,
+                passwordEncoder);
         adminRole = Role.builder().id(ADMIN_ROLE_ID).name("ADMIN").active(true).build();
         otherRole = Role.builder().id(OTHER_ROLE_ID).name("SELLER").active(true).build();
         adminActor = User.builder().id(ADMIN_ACTOR_ID).username("admin").email("admin@example.com")
@@ -125,7 +126,7 @@ class UserServiceRefreshTokenLifecycleTest {
     }
 
     private void stubUniqueGuards() {
-        when(userRepository.findByUsername(any())).thenReturn(Optional.empty());
+        when(userRepository.findByUsernameIgnoreCase(any())).thenReturn(Optional.empty());
         when(userRepository.findByEmail(any())).thenReturn(Optional.empty());
     }
 
@@ -178,7 +179,7 @@ class UserServiceRefreshTokenLifecycleTest {
         when(userRepository.findById(ADMIN_ACTOR_ID)).thenReturn(Optional.of(adminActor));
         when(userRepository.countByStatusAndRolesId(UserStatus.ACTIVE, ADMIN_ROLE_ID)).thenReturn(2L);
         when(userRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(userRepository.findByUsername(any())).thenReturn(Optional.empty());
+        when(userRepository.findByUsernameIgnoreCase(any())).thenReturn(Optional.empty());
         when(userRepository.findByEmail(any())).thenReturn(Optional.empty());
         when(refreshTokenRepository.findByTokenHashForUpdate(sha256(oldToken))).thenReturn(Optional.of(stored));
         doAnswer(invocation -> {

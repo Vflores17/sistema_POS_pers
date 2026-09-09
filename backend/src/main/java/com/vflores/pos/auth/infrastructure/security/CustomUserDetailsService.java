@@ -24,7 +24,8 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Override
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String identifier) throws UsernameNotFoundException {
-        User user = userRepository.findForAuthentication(identifier)
+        User user = userRepository.findAllForAuthentication(identifier).stream()
+                .findFirst()
                 .orElseThrow(() -> new UsernameNotFoundException("Invalid credentials"));
 
         if (user.getStatus() == UserStatus.BLOCKED) {

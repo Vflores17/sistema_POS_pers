@@ -30,6 +30,36 @@ public class AdminAuthorizedOperationExecutor {
         if (hasAuthority(authentication, requiredPermission)) {
             return operation.get();
         }
+        return executeWithTemporaryAuthorization(
+                authentication, operationKey, resourceType, resourceId, token, operation
+        );
+    }
+
+    @Transactional
+    public <T> T executeForAdminActor(
+            Authentication authentication,
+            String operationKey,
+            String resourceType,
+            UUID resourceId,
+            String token,
+            Supplier<T> operation
+    ) {
+        if (hasAuthority(authentication, "ROLE_ADMIN")) {
+            return operation.get();
+        }
+        return executeWithTemporaryAuthorization(
+                authentication, operationKey, resourceType, resourceId, token, operation
+        );
+    }
+
+    private <T> T executeWithTemporaryAuthorization(
+            Authentication authentication,
+            String operationKey,
+            String resourceType,
+            UUID resourceId,
+            String token,
+            Supplier<T> operation
+    ) {
         if (token == null || token.isBlank()) {
             throw new AdminAuthorizationRequiredException();
         }
